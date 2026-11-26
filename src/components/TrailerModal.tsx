@@ -35,7 +35,7 @@ export function TrailerModal({ open, onClose }: TrailerModalProps) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="trailer-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/88 p-4 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/90 p-4 md:bg-black/85 md:backdrop-blur-md"
       onClick={() => {
         soundEngine.playUiCue(220);
         onClose();
@@ -88,6 +88,7 @@ export function TrailerModal({ open, onClose }: TrailerModalProps) {
             className="h-full w-full"
             src="https://www.youtube.com/embed/WwXD5OTlyHg?autoplay=1&rel=0"
             title="Avengers: Doomsday Official Trailer"
+            referrerPolicy="strict-origin-when-cross-origin"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
           />

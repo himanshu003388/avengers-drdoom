@@ -12,6 +12,8 @@ export interface CharacterProfile {
   dossier: string;
   threatLevel: string;
   imageUrl: string;
+  imageSrcSet?: string;
+  imageSizes?: string;
   imageScaleClass?: string;
   accentHex: string;
   emberTint: EmberTint;
@@ -30,7 +32,11 @@ export const DOCTOR_DOOM: CharacterProfile = {
   dossier:
     'Armed with peerless intellect and forbidden mystic arts, Victor Von Doom steps out of the collapsing multiverse to impose absolute order over the ashes of broken timelines.',
   threatLevel: 'OMEGA-CLASS SOVEREIGN',
-  imageUrl: '/assets/aistudio/doctor-doom-smoke-3840x2160-27629_6d3facbc.png',
+  imageUrl: '/assets/aistudio/doctor-doom-smoke-1600.webp',
+  imageSrcSet:
+    '/assets/aistudio/doctor-doom-smoke-960.webp 960w, /assets/aistudio/doctor-doom-smoke-1600.webp 1600w',
+  imageSizes: '(max-width: 1023px) 164vw, 112vw',
+  imageScaleClass: 'scale-[1.12]',
   accentHex: '#22C55E',
   emberTint: 'emerald',
   isCutout: true,
@@ -57,14 +63,14 @@ export const CHARACTERS: CharacterProfile[] = [
   {
     id: 'captain-america',
     name: 'Captain America',
-    alias: 'Sam Wilson',
+    alias: 'Sentinel of Liberty',
     faction: 'Avengers',
     role: 'Field Commander, Avengers',
     realm: 'Earth-616 · New Avengers Compound',
     weapon: 'Vibranium Shield & Exo-7 Flight Suit',
     quote: 'When worlds collide, we don’t trade lives—we hold the line.',
     dossier:
-      'Tasked with uniting a fractured roster of heroes across realities, Sam Wilson leads Earth-616’s first response against the Latverian sovereign’s incursion.',
+      'Tasked with uniting a fractured roster of heroes across realities, Captain America leads Earth-616’s first response against the Latverian sovereign’s incursion.',
     threatLevel: 'TACTICAL VANGUARD',
     imageUrl: '',
     accentHex: '#A3E635',

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface FluidNode {
   x: number;
@@ -6,15 +6,26 @@ interface FluidNode {
 }
 
 const NODE_COUNT = 12;
-const BLOB_SEGMENTS = 28;
+const BLOB_SEGMENTS = 24;
 
 export function CinematicOverlay() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [enableFluidCursor, setEnableFluidCursor] = useState(false);
 
   useEffect(() => {
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const isFinePointer = window.matchMedia('(pointer: fine) and (hover: hover)').matches;
+    if (prefersReduced || !isFinePointer) {
+      setEnableFluidCursor(false);
+      return;
+    }
+    setEnableFluidCursor(true);
+  }, []);
+
+  useEffect(() => {
+    if (!enableFluidCursor) return;
     const canvas = canvasRef.current;
-    if (prefersReduced || !canvas) return;
+    if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -37,14 +48,13 @@ export function CinematicOverlay() {
     syncSize();
     window.addEventListener('resize', syncSize, { passive: true });
 
-    const nodes: FluidNode[] = Array.from({ length: NODE_COUNT }, () => ({
-      x: -200,
-      y: -200,
-    }));
+    const nodes: FluidNode[] = Array.from({ length: NODE_COUNT }, () => ({ x: -200, y: -200 }));
+    const leftPts: FluidNode[] = Array.from({ length: NODE_COUNT }, () => ({ x: 0, y: 0 }));
+    const rightPts: FluidNode[] = Array.from({ length: NODE_COUNT }, () => ({ x: 0, y: 0 }));
+    const blobPts: FluidNode[] = Array.from({ length: BLOB_SEGMENTS }, () => ({ x: 0, y: 0 }));
 
     let hasInitialized = false;
     let isActive = false;
-    let isTouch = false;
     let isHoveringInteractive = false;
 
     let targetX = -200;
@@ -53,11 +63,20 @@ export function CinematicOverlay() {
     let smoothVy = 0;
     let opacity = 0;
     let hoverMix = 0;
+    let rafId = 0;
+    let lastTime = performance.now();
+
+    const startLoop = () => {
+      if (!rafId && !document.hidden) {
+        lastTime = performance.now();
+        rafId = window.requestAnimationFrame(tick);
+      }
+    };
 
     const activateAt = (x: number, y: number, pointerType: string, target: EventTarget | null) => {
+      if (pointerType === 'touch') return;
       targetX = x;
       targetY = y;
-      isTouch = pointerType === 'touch';
       isActive = true;
 
       if (!hasInitialized) {
@@ -68,11 +87,13 @@ export function CinematicOverlay() {
         }
       }
 
-      if (!isTouch && target instanceof Element) {
+      if (target instanceof Element) {
         isHoveringInteractive = Boolean(target.closest('a, button, [role="button"]'));
       } else {
         isHoveringInteractive = false;
       }
+
+      startLoop();
     };
 
     const onPointerDown = (e: PointerEvent) => {
@@ -83,27 +104,13 @@ export function CinematicOverlay() {
       activateAt(e.clientX, e.clientY, e.pointerType, e.target);
     };
 
-    const onPointerUp = (e: PointerEvent) => {
-      if (e.pointerType === 'touch') {
-        isActive = false;
-      }
-    };
-
     const onPointerLeave = () => {
       isActive = false;
       isHoveringInteractive = false;
+      startLoop();
     };
 
-    window.addEventListener('pointerdown', onPointerDown, { passive: true });
-    window.addEventListener('pointermove', onPointerMove, { passive: true });
-    window.addEventListener('pointerup', onPointerUp, { passive: true });
-    window.addEventListener('pointercancel', onPointerUp, { passive: true });
-    document.documentElement.addEventListener('mouseleave', onPointerLeave);
-
-    let rafId = 0;
-    let lastTime = performance.now();
-
-    const drawSmoothClosedLoop = (points: { x: number; y: number }[]) => {
+    const drawSmoothClosedLoop = (points: FluidNode[]) => {
       const len = points.length;
       if (len < 3) return;
       const firstMidX = (points[len - 1].x + points[0].x) * 0.5;
@@ -113,14 +120,17 @@ export function CinematicOverlay() {
       for (let i = 0; i < len; i++) {
         const curr = points[i];
         const next = points[(i + 1) % len];
-        const midX = (curr.x + next.x) * 0.5;
-        const midY = (curr.y + next.y) * 0.5;
-        ctx.quadraticCurveTo(curr.x, curr.y, midX, midY);
+        ctx.quadraticCurveTo(curr.x, curr.y, (curr.x + next.x) * 0.5, (curr.y + next.y) * 0.5);
       }
       ctx.closePath();
     };
 
     const tick = (now: number) => {
+      if (document.hidden) {
+        rafId = 0;
+        return;
+      }
+
       const dt = Math.min((now - lastTime) / 1000, 0.05);
       lastTime = now;
       const time = now * 0.001;
@@ -156,18 +166,20 @@ export function CinematicOverlay() {
 
       ctx.clearRect(0, 0, width, height);
 
+      if (opacity <= 0.01 && !isActive) {
+        opacity = 0;
+        rafId = 0;
+        return;
+      }
+
       if (opacity > 0.01 && hasInitialized) {
         const speed = Math.hypot(smoothVx, smoothVy);
         const moveAngle = Math.atan2(smoothVy, smoothVx);
         const speedNorm = Math.min(speed / 1300, 1);
 
-        const baseRadius = (isTouch ? 18 : 13.5) + hoverMix * 8.5;
+        const baseRadius = 13.5 + hoverMix * 8.5;
         const head = nodes[0];
         const tail = nodes[NODE_COUNT - 1];
-
-        // 1. Flowing viscous tail ribbon
-        const leftPts: { x: number; y: number }[] = [];
-        const rightPts: { x: number; y: number }[] = [];
 
         for (let i = 0; i < NODE_COUNT; i++) {
           const curr = nodes[i];
@@ -183,8 +195,10 @@ export function CinematicOverlay() {
           const taper = Math.pow(1 - t, 1.35);
           const r = baseRadius * 0.82 * taper;
 
-          leftPts.push({ x: curr.x + nx * r, y: curr.y + ny * r });
-          rightPts.push({ x: curr.x - nx * r, y: curr.y - ny * r });
+          leftPts[i].x = curr.x + nx * r;
+          leftPts[i].y = curr.y + ny * r;
+          rightPts[i].x = curr.x - nx * r;
+          rightPts[i].y = curr.y - ny * r;
         }
 
         const tailDist = Math.hypot(head.x - tail.x, head.y - tail.y);
@@ -193,13 +207,13 @@ export function CinematicOverlay() {
           ctx.globalAlpha = opacity;
           ctx.beginPath();
           ctx.moveTo(leftPts[0].x, leftPts[0].y);
-          for (let i = 1; i < leftPts.length; i++) {
+          for (let i = 1; i < NODE_COUNT; i++) {
             const prev = leftPts[i - 1];
             const curr = leftPts[i];
             ctx.quadraticCurveTo(prev.x, prev.y, (prev.x + curr.x) * 0.5, (prev.y + curr.y) * 0.5);
           }
           ctx.lineTo(tail.x, tail.y);
-          for (let i = rightPts.length - 1; i >= 1; i--) {
+          for (let i = NODE_COUNT - 1; i >= 1; i--) {
             const curr = rightPts[i];
             const prev = rightPts[i - 1];
             ctx.quadraticCurveTo(curr.x, curr.y, (curr.x + prev.x) * 0.5, (curr.y + prev.y) * 0.5);
@@ -215,8 +229,6 @@ export function CinematicOverlay() {
           ctx.restore();
         }
 
-        // 2. Organic liquid head droplet with velocity stretch & surface-tension ripples
-        const blobPts: { x: number; y: number }[] = [];
         const wobbleAmp = 0.055 + speedNorm * 0.06 + hoverMix * 0.02;
 
         for (let i = 0; i < BLOB_SEGMENTS; i++) {
@@ -229,16 +241,13 @@ export function CinematicOverlay() {
             Math.sin(angle * 2 + time * 1.7) * (wobbleAmp * 0.7);
 
           const r = baseRadius * stretch * (1 + ripple);
-          blobPts.push({
-            x: head.x + Math.cos(angle) * r,
-            y: head.y + Math.sin(angle) * r,
-          });
+          blobPts[i].x = head.x + Math.cos(angle) * r;
+          blobPts[i].y = head.y + Math.sin(angle) * r;
         }
 
         ctx.save();
         ctx.globalAlpha = opacity;
 
-        // Soft outer emerald aura
         const auraRadius = baseRadius * 2.1;
         const auraGrad = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, auraRadius);
         auraGrad.addColorStop(0, `rgba(74, 222, 128, ${0.22 + hoverMix * 0.14})`);
@@ -249,7 +258,6 @@ export function CinematicOverlay() {
         ctx.arc(head.x, head.y, auraRadius, 0, Math.PI * 2);
         ctx.fill();
 
-        // Main fluid membrane
         drawSmoothClosedLoop(blobPts);
         const bodyGrad = ctx.createRadialGradient(
           head.x - baseRadius * 0.22,
@@ -269,7 +277,6 @@ export function CinematicOverlay() {
         ctx.strokeStyle = `rgba(74, 222, 128, ${0.5 + hoverMix * 0.38})`;
         ctx.stroke();
 
-        // Luminous inner core droplet
         const coreRadius = 2.6 + hoverMix * 0.9;
         const coreGrad = ctx.createRadialGradient(head.x, head.y, 0, head.x, head.y, coreRadius * 2.2);
         coreGrad.addColorStop(0, 'rgba(187, 247, 208, 0.95)');
@@ -286,28 +293,38 @@ export function CinematicOverlay() {
       rafId = window.requestAnimationFrame(tick);
     };
 
-    rafId = window.requestAnimationFrame(tick);
+    const onVisibilityChange = () => {
+      if (!document.hidden && (isActive || opacity > 0.01)) {
+        startLoop();
+      }
+    };
+
+    window.addEventListener('pointerdown', onPointerDown, { passive: true });
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('pointercancel', onPointerLeave, { passive: true });
+    document.documentElement.addEventListener('mouseleave', onPointerLeave);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pageshow', onVisibilityChange);
 
     return () => {
       window.cancelAnimationFrame(rafId);
       window.removeEventListener('resize', syncSize);
       window.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      window.removeEventListener('pointercancel', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerLeave);
       document.documentElement.removeEventListener('mouseleave', onPointerLeave);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pageshow', onVisibilityChange);
     };
-  }, []);
+  }, [enableFluidCursor]);
 
   return (
     <>
-      {/* 35mm Theatrical Film Grain */}
       <div
         aria-hidden="true"
         className="film-grain pointer-events-none fixed inset-0 z-30 opacity-60"
       />
 
-      {/* Cinematic Peripheral Vignette */}
       <div
         aria-hidden="true"
         className="pointer-events-none fixed inset-0 z-30"
@@ -317,12 +334,13 @@ export function CinematicOverlay() {
         }}
       />
 
-      {/* Fluid Pointer & Touch Tracking Overlay */}
-      <canvas
-        ref={canvasRef}
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-0 z-40"
-      />
+      {enableFluidCursor && (
+        <canvas
+          ref={canvasRef}
+          aria-hidden="true"
+          className="pointer-events-none fixed inset-0 z-40"
+        />
+      )}
     </>
   );
 }

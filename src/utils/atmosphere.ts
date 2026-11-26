@@ -3,23 +3,17 @@ export type AtmosphereMode = 'smoke-and-embers' | 'ember-surge' | 'minimal';
 export type EmberTint =
   | 'emerald'
   | 'chartreuse'
-  | 'crimson-emerald'
   | 'cyan-emerald'
-  | 'electric-blue'
-  | 'thunder-gold';
+  | 'electric-blue';
 
 export function getEmberTintColor(tint: EmberTint): [number, number, number] {
   switch (tint) {
     case 'electric-blue':
       return [0.22, 0.74, 0.98];
-    case 'thunder-gold':
-      return [0.98, 0.80, 0.08];
     case 'cyan-emerald':
       return [0.16, 0.78, 0.92];
     case 'chartreuse':
       return [0.58, 0.92, 0.24];
-    case 'crimson-emerald':
-      return [0.12, 0.88, 0.56];
     case 'emerald':
     default:
       return [0.18, 0.84, 0.4];
@@ -41,12 +35,23 @@ export function getShaderIntensity(mode: AtmosphereMode): number {
 export function computeShaderBufferSize(
   clientWidth: number,
   clientHeight: number,
-  isSoftwareRenderer: boolean
+  isSoftwareRenderer: boolean,
+  isMobile = false
 ): { width: number; height: number } {
   const safeW = Math.max(1, Math.round(clientWidth || 1280));
   const safeH = Math.max(1, Math.round(clientHeight || 720));
-  const maxWidth = isSoftwareRenderer ? 720 : 1280;
-  const scale = safeW > maxWidth ? maxWidth / safeW : isSoftwareRenderer ? 0.65 : 1;
+
+  let scale = 1;
+  if (isSoftwareRenderer) {
+    const maxWidth = 540;
+    scale = safeW > maxWidth ? maxWidth / safeW : 0.55;
+  } else if (isMobile || safeW <= 768) {
+    const targetMaxWidth = 420;
+    scale = Math.min(0.65, targetMaxWidth / safeW);
+  } else {
+    const maxWidth = 1024;
+    scale = safeW > maxWidth ? maxWidth / safeW : 1;
+  }
 
   return {
     width: Math.max(1, Math.round(safeW * scale)),
