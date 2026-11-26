@@ -56,9 +56,14 @@ export const CHARACTERS: CharacterProfile[] = [
     dossier:
       'Summoned from the edge of the cosmos as Loki’s multiversal branches begin to wither, Thor brings the full fury of the Bifrost into the Battleworld storm.',
     threatLevel: 'COSMIC DEITY',
-    imageUrl: '',
-    accentHex: '#38BDF8',
-    emberTint: 'electric-blue',
+    imageUrl: '/assets/aistudio/thor-odinson-1024.webp',
+    imageSrcSet:
+      '/assets/aistudio/thor-odinson-640.webp 640w, /assets/aistudio/thor-odinson-1024.webp 1024w',
+    imageSizes: '(max-width: 1023px) 164vw, 112vw',
+    imageScaleClass: 'scale-[1.12]',
+    accentHex: '#FACC15',
+    emberTint: 'electric-yellow',
+    isCutout: true,
   },
   {
     id: 'captain-america',
@@ -72,9 +77,14 @@ export const CHARACTERS: CharacterProfile[] = [
     dossier:
       'Tasked with uniting a fractured roster of heroes across realities, Captain America leads Earth-616’s first response against the Latverian sovereign’s incursion.',
     threatLevel: 'TACTICAL VANGUARD',
-    imageUrl: '',
+    imageUrl: '/assets/aistudio/captain-america-1024.webp',
+    imageSrcSet:
+      '/assets/aistudio/captain-america-640.webp 640w, /assets/aistudio/captain-america-1024.webp 695w',
+    imageSizes: '(max-width: 1023px) 164vw, 112vw',
+    imageScaleClass: 'scale-[1.12]',
     accentHex: '#A3E635',
     emberTint: 'chartreuse',
+    isCutout: true,
   },
   {
     id: 'mister-fantastic',
@@ -88,8 +98,11 @@ export const CHARACTERS: CharacterProfile[] = [
     dossier:
       'Crossing the dimensional barrier after witnessing his own universe unravel, Reed Richards races against the final incursion to decipher Doom’s Battleworld blueprint.',
     threatLevel: 'STRATEGIC GENIUS',
-    imageUrl: '',
+    imageUrl: '/assets/aistudio/mister-fantastic-1024.webp',
+    imageSizes: '(max-width: 1023px) 164vw, 112vw',
+    imageScaleClass: 'scale-[1.12]',
     accentHex: '#38BDF8',
     emberTint: 'cyan-emerald',
+    isCutout: true,
   },
 ];

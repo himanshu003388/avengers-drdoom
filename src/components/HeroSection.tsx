@@ -4,11 +4,50 @@ import type { CharacterProfile } from '../data/characters';
 import { soundEngine } from '../utils/sound';
 import { CountdownTimer } from './CountdownTimer';
 
-const COUNTER_GET_URL = 'https://api.counterapi.dev/v1/avengers-doomsday-campus/interested';
-const COUNTER_UP_URL = 'https://api.counterapi.dev/v1/avengers-doomsday-campus/interested/up';
+const API_INTERESTED_URL = '/api/interested';
+const ABACUS_GET_URL = 'https://abacus.jasoncameron.dev/get/avengers-doomsday-campus/interested';
+const ABACUS_HIT_URL = 'https://abacus.jasoncameron.dev/hit/avengers-doomsday-campus/interested';
 const VOTED_STORAGE_KEY = 'doomsday_campus_interested';
 const COUNT_STORAGE_KEY = 'doomsday_campus_interested_count';
 const FETCH_TIMEOUT_MS = 5000;
+
+async function fetchInterestCount(
+  mode: 'get' | 'increment',
+  signal: AbortSignal
+): Promise<number | null> {
+  const method = mode === 'increment' ? 'POST' : 'GET';
+
+  try {
+    const apiRes = await fetch(API_INTERESTED_URL, {
+      method,
+      cache: 'no-store',
+      signal,
+    });
+    const contentType = apiRes.headers.get('content-type') || '';
+    if (apiRes.ok && contentType.includes('application/json')) {
+      const data = (await apiRes.json()) as { count?: unknown };
+      if (typeof data.count === 'number' && Number.isFinite(data.count)) {
+        return data.count;
+      }
+    }
+  } catch (err) {
+    if (signal.aborted) throw err;
+  }
+
+  // Fallback for local Vite dev (where /api/* is not served)
+  const fallbackUrl = mode === 'increment' ? ABACUS_HIT_URL : ABACUS_GET_URL;
+  const fallbackRes = await fetch(fallbackUrl, { cache: 'no-store', signal });
+  if (mode === 'get' && fallbackRes.status === 404) {
+    return 0;
+  }
+  if (!fallbackRes.ok) {
+    return null;
+  }
+  const fallbackData = (await fallbackRes.json()) as { value?: unknown };
+  return typeof fallbackData.value === 'number' && Number.isFinite(fallbackData.value)
+    ? fallbackData.value
+    : null;
+}
 
 interface HeroSectionProps {
   activeCharacter: CharacterProfile;
@@ -46,13 +85,12 @@ export function HeroSection({
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
-    fetch(COUNTER_GET_URL, { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { count?: number } | null) => {
-        if (data && typeof data.count === 'number') {
-          setInterestCount(data.count);
+    fetchInterestCount('get', controller.signal)
+      .then((count) => {
+        if (typeof count === 'number') {
+          setInterestCount(count);
           try {
-            localStorage.setItem(COUNT_STORAGE_KEY, String(data.count));
+            localStorage.setItem(COUNT_STORAGE_KEY, String(count));
           } catch {
             // Ignore storage errors
           }
@@ -91,13 +129,12 @@ export function HeroSection({
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
-    fetch(COUNTER_UP_URL, { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: { count?: number } | null) => {
-        if (data && typeof data.count === 'number') {
-          setInterestCount(data.count);
+    fetchInterestCount('increment', controller.signal)
+      .then((count) => {
+        if (typeof count === 'number') {
+          setInterestCount(count);
           try {
-            localStorage.setItem(COUNT_STORAGE_KEY, String(data.count));
+            localStorage.setItem(COUNT_STORAGE_KEY, String(count));
           } catch {
             // Ignore storage errors
           }
@@ -114,62 +151,81 @@ export function HeroSection({
   return (
     <section
       id="overview"
-      className="relative mx-auto flex h-dvh max-w-5xl flex-col items-center justify-start overflow-hidden px-[clamp(0.75rem,3.5vw,2rem)] pb-[max(clamp(1.5rem,4dvh,2.75rem),env(safe-area-inset-bottom))] pt-[calc(var(--stage-center-y)+min(15dvh,27vw))] text-center md:justify-end md:pt-[clamp(4.5rem,11dvh,6.5rem)] md:pb-[clamp(1.25rem,3.5dvh,2.25rem)] lg:pb-[clamp(2.75rem,6dvh,4.25rem)] [@media(max-height:540px)]:justify-end [@media(max-height:540px)]:pt-14"
+      className="relative flex min-h-full w-full flex-col items-center justify-between px-[clamp(0.75rem,3vw,2rem)] pt-[clamp(0.5rem,1.5dvh,1.25rem)] pb-[clamp(0.375rem,1.5dvh,1.5rem)] text-center lg:pb-[clamp(0.75rem,2.5dvh,2.25rem)]"
     >
-      {/* Top-Left Fixed Active Dossier Readout (crossfades smoothly on scroll) */}
-      <div
-        aria-live="polite"
-        className="pointer-events-none fixed left-[clamp(0.75rem,3vw,2rem)] top-[max(4.15rem,calc(env(safe-area-inset-top)+3.45rem))] z-30 grid max-w-[min(56vw,16.5rem)] text-left sm:max-w-[19rem] lg:max-w-[20.5rem] [@media(max-height:610px)]:hidden"
-      >
-        {characters.map((character, index) => {
-          const isActive = character.id === activeCharacter.id;
-          return (
-            <div
-              key={character.id}
-              aria-hidden={!isActive}
-              className={`[grid-area:1/1] transition-opacity duration-700 ease-out will-change-[opacity] ${
-                isActive ? 'opacity-100' : 'opacity-0'
-              }`}
-            >
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <span
-                  className="inline-block h-3.5 w-[3px] rounded-full"
+      {/* Top HUD Row: Active Dossier Readout (left) + Movie Logo on md+ (right) */}
+      <h1 className="sr-only">Marvel Studios&apos; Avengers: Doomsday</h1>
+      <div className="flex w-full shrink-0 items-start justify-between gap-4">
+        <div
+          aria-live="polite"
+          className="pointer-events-none grid min-w-0 max-w-[min(78vw,17.5rem)] text-left sm:max-w-[19rem] lg:max-w-[20.5rem] [@media(max-height:540px)]:hidden"
+        >
+          {characters.map((character, index) => {
+            const isActive = character.id === activeCharacter.id;
+            return (
+              <div
+                key={character.id}
+                aria-hidden={!isActive}
+                className={`[grid-area:1/1] transition-opacity duration-700 ease-out will-change-[opacity] ${
+                  isActive ? 'opacity-100' : 'opacity-0'
+                }`}
+              >
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <span
+                    className="inline-block h-3.5 w-[3px] rounded-full"
+                    style={{
+                      backgroundColor: character.accentHex,
+                      boxShadow: `0 0 12px ${character.accentHex}`,
+                    }}
+                  />
+                  <span className="text-[clamp(0.5625rem,1.4vw,0.625rem)] font-bold tracking-[clamp(0.16em,0.3vw,0.28em)] text-white/85 uppercase">
+                    {character.faction} · {String(index + 1).padStart(2, '0')}/
+                    {String(characters.length).padStart(2, '0')}
+                  </span>
+                  <span className="hidden rounded-full border border-white/15 bg-black/45 px-2 py-0.5 text-[8.5px] font-semibold tracking-[0.16em] text-white/75 uppercase sm:inline-block">
+                    {character.threatLevel}
+                  </span>
+                </div>
+
+                <h2
+                  className="mt-1 font-marvel text-[clamp(1.15rem,3.5vw,2.75rem)] font-bold leading-[0.95] tracking-[0.04em] text-white uppercase"
                   style={{
-                    backgroundColor: character.accentHex,
-                    boxShadow: `0 0 12px ${character.accentHex}`,
+                    textShadow: `0 4px 20px rgba(0, 0, 0, 0.95), 0 0 26px ${character.accentHex}55`,
                   }}
-                />
-                <span className="text-[clamp(0.5625rem,1.4vw,0.625rem)] font-bold tracking-[clamp(0.16em,0.3vw,0.28em)] text-white/85 uppercase">
-                  {character.faction} · {String(index + 1).padStart(2, '0')}/
-                  {String(characters.length).padStart(2, '0')}
-                </span>
-                <span className="hidden rounded-full border border-white/15 bg-black/45 px-2 py-0.5 text-[8.5px] font-semibold tracking-[0.16em] text-white/75 uppercase sm:inline-block">
-                  {character.threatLevel}
-                </span>
+                >
+                  {character.name}
+                </h2>
+
+                <p
+                  className="mt-1 text-[clamp(0.5625rem,1.3vw,0.625rem)] font-semibold tracking-[0.18em] uppercase"
+                  style={{ color: character.accentHex }}
+                >
+                  <span className="hidden sm:inline">{character.alias} · </span>
+                  {character.role}
+                </p>
               </div>
+            );
+          })}
+        </div>
 
-              <h2
-                className="mt-1 font-marvel text-[clamp(1.15rem,3.5vw,2.75rem)] font-bold leading-[0.95] tracking-[0.04em] text-white uppercase"
-                style={{
-                  textShadow: `0 4px 20px rgba(0, 0, 0, 0.95), 0 0 26px ${character.accentHex}55`,
-                }}
-              >
-                {character.name}
-              </h2>
-
-              <p
-                className="mt-1 text-[clamp(0.5625rem,1.3vw,0.625rem)] font-semibold tracking-[0.18em] uppercase"
-                style={{ color: character.accentHex }}
-              >
-                <span className="hidden sm:inline">{character.alias} · </span>
-                {character.role}
-              </p>
-            </div>
-          );
-        })}
+        <div className="hidden shrink-0 items-center justify-end md:flex">
+          <img
+            src="/assets/aistudio/avengers-doomsday-logo.webp"
+            alt="Marvel Studios' Avengers: Doomsday Movie Logo"
+            width={450}
+            height={250}
+            draggable={false}
+            loading="eager"
+            fetchPriority="high"
+            className="pointer-events-none h-[clamp(8.55rem,23.4dvh,17.1rem)] w-auto max-w-[min(48vw,38rem)] select-none object-contain drop-shadow-[0_10px_24px_rgba(0,0,0,0.92)] lg:h-[clamp(10.35rem,27dvh,19.8rem)] lg:max-w-[min(52vw,42rem)] [@media(max-height:540px)]:h-[clamp(3.75rem,16dvh,5.5rem)]"
+          />
+        </div>
       </div>
 
-      <div className="flex w-full flex-col items-center">
+      {/* Flexible Stage Window: lets background character art breathe when vertical space allows, compresses cleanly on small viewports */}
+      <div className="min-h-[clamp(0.5rem,2dvh,2rem)] flex-1 [@media(max-height:540px)]:min-h-1" aria-hidden="true" />
+
+      <div className="mx-auto flex w-full max-w-5xl shrink-0 flex-col items-center">
         <div className="grid w-full justify-items-center">
           {characters.map((character) => {
             const isActive = character.id === activeCharacter.id;
@@ -191,7 +247,7 @@ export function HeroSection({
           })}
         </div>
 
-        <h1 className="mt-[clamp(0.25rem,0.8dvh,0.5rem)] flex max-w-full items-center justify-center px-2 sm:px-4">
+        <div className="mt-[clamp(0.2rem,0.7dvh,0.5rem)] flex max-w-full items-center justify-center px-2 sm:px-4 md:hidden">
           <img
             src="/assets/aistudio/avengers-doomsday-logo.webp"
             alt="Marvel Studios' Avengers: Doomsday Movie Logo"
@@ -200,11 +256,11 @@ export function HeroSection({
             draggable={false}
             loading="eager"
             fetchPriority="high"
-            className="h-[clamp(6.95rem,21.5dvh,13.25rem)] w-auto max-w-[min(98vw,75rem)] select-none object-contain drop-shadow-[0_10px_24px_rgba(0,0,0,0.92)] md:h-[clamp(13.25rem,32dvh,26.5rem)] [@media(max-height:540px)]:h-[clamp(5.6rem,25dvh,9rem)]"
+            className="h-[clamp(4.75rem,17dvh,11.5rem)] w-auto max-w-[min(92vw,34rem)] select-none object-contain drop-shadow-[0_10px_24px_rgba(0,0,0,0.92)] [@media(max-height:540px)]:h-[clamp(3.25rem,15dvh,5rem)]"
           />
-        </h1>
+        </div>
 
-        <div className="mt-[clamp(0.25rem,1dvh,0.625rem)] grid w-full max-w-xl justify-items-center px-2">
+        <div className="mt-[clamp(0.2rem,0.9dvh,0.625rem)] grid w-full max-w-xl justify-items-center px-2">
           {characters.map((character) => {
             const isActive = character.id === activeCharacter.id;
             return (
@@ -221,12 +277,12 @@ export function HeroSection({
           })}
         </div>
 
-        <div className="mt-[clamp(0.5rem,1.8dvh,2rem)] w-full">
+        <div className="mt-[clamp(0.375rem,1.4dvh,1.75rem)] w-full">
           <CountdownTimer />
         </div>
 
         {/* Theatrical CTAs */}
-        <div className="mt-[clamp(0.625rem,2dvh,1.75rem)] flex w-full flex-wrap items-center justify-center gap-[clamp(0.5rem,1.8vw,0.875rem)]">
+        <div className="mt-[clamp(0.5rem,1.6dvh,1.5rem)] flex w-full flex-wrap items-center justify-center gap-[clamp(0.45rem,1.8vw,0.875rem)]">
           <button
             type="button"
             onMouseEnter={onSurgeAtmosphere}
@@ -234,9 +290,20 @@ export function HeroSection({
               soundEngine.playUiCue(320);
               onOpenTrailer();
             }}
-            className="group inline-flex min-h-[42px] items-center justify-center gap-2 rounded-full border border-emerald-400/50 bg-emerald-950/85 px-[clamp(1rem,3.5vw,1.5rem)] py-[clamp(0.5rem,1.2dvh,0.625rem)] text-[clamp(0.625rem,1.4vw,0.75rem)] font-bold tracking-[0.18em] text-emerald-100 uppercase transition-all duration-300 hover:border-emerald-300 hover:bg-emerald-500/30 doom-glow-box hover:doom-glow-box-strong md:bg-emerald-600/20 md:backdrop-blur-md focus-visible:outline-2 focus-visible:outline-emerald-400"
+            style={{
+              borderColor: `${activeCharacter.accentHex}80`,
+              backgroundColor: `${activeCharacter.accentHex}26`,
+              boxShadow: `0 0 24px ${activeCharacter.accentHex}33, inset 0 0 14px ${activeCharacter.accentHex}1f`,
+            }}
+            className="group inline-flex min-h-[38px] items-center justify-center gap-2 rounded-full border px-[clamp(0.9rem,3.2vw,1.5rem)] py-[clamp(0.4rem,1dvh,0.625rem)] text-[clamp(0.625rem,1.4vw,0.75rem)] font-bold tracking-[0.18em] text-white uppercase transition-all duration-500 hover:brightness-125 sm:min-h-[42px] md:backdrop-blur-md focus-visible:outline-2 focus-visible:outline-white/75"
           >
-            <Play className="h-3.5 w-3.5 fill-emerald-300 text-emerald-300 transition-transform duration-300 group-hover:scale-110" />
+            <Play
+              className="h-3.5 w-3.5 transition-transform duration-300 group-hover:scale-110"
+              style={{
+                color: activeCharacter.accentHex,
+                fill: activeCharacter.accentHex,
+              }}
+            />
             <span>Watch Trailer</span>
           </button>
 
@@ -244,20 +311,36 @@ export function HeroSection({
             type="button"
             onClick={handleInterestedClick}
             aria-pressed={interested}
-            className={`inline-flex min-h-[42px] items-center justify-center gap-2 rounded-full border px-[clamp(0.9rem,3.2vw,1.25rem)] py-[clamp(0.5rem,1.2dvh,0.625rem)] text-[clamp(0.625rem,1.4vw,0.75rem)] font-semibold tracking-[0.16em] uppercase transition md:backdrop-blur-md focus-visible:outline-2 focus-visible:outline-emerald-400 ${
+            style={
               interested
-                ? 'border-emerald-400/70 bg-emerald-900/75 text-white doom-glow-box md:bg-emerald-500/25'
-                : 'border-emerald-500/25 bg-[#040a06]/85 text-emerald-200/85 hover:border-emerald-400/50 hover:text-emerald-100 md:bg-[#040a06]/70'
+                ? {
+                    borderColor: `${activeCharacter.accentHex}b3`,
+                    backgroundColor: `${activeCharacter.accentHex}33`,
+                    boxShadow: `0 0 24px ${activeCharacter.accentHex}38, inset 0 0 14px ${activeCharacter.accentHex}22`,
+                  }
+                : {
+                    borderColor: `${activeCharacter.accentHex}47`,
+                    backgroundColor: 'rgba(6, 8, 6, 0.78)',
+                  }
+            }
+            className={`inline-flex min-h-[38px] items-center justify-center gap-2 rounded-full border px-[clamp(0.85rem,3vw,1.25rem)] py-[clamp(0.4rem,1dvh,0.625rem)] text-[clamp(0.625rem,1.4vw,0.75rem)] font-semibold tracking-[0.16em] uppercase transition-all duration-500 hover:brightness-125 sm:min-h-[42px] md:backdrop-blur-md focus-visible:outline-2 focus-visible:outline-white/75 ${
+              interested ? 'text-white' : 'text-white/85 hover:text-white'
             }`}
           >
             {interested ? (
-              <Check className="h-3.5 w-3.5 text-emerald-300" />
+              <Check className="h-3.5 w-3.5" style={{ color: activeCharacter.accentHex }} />
             ) : (
-              <Flame className="h-3.5 w-3.5 text-emerald-400" />
+              <Flame className="h-3.5 w-3.5" style={{ color: activeCharacter.accentHex }} />
             )}
             <span>{interested ? 'Interested' : 'I am Interested'}</span>
             {interestCount > 0 && (
-              <span className="rounded-full bg-emerald-400/20 px-2 py-0.5 text-[10px] font-bold tracking-normal text-emerald-200 tabular-nums">
+              <span
+                className="rounded-full px-2 py-0.5 text-[10px] font-bold tracking-normal tabular-nums transition-colors duration-500"
+                style={{
+                  backgroundColor: `${activeCharacter.accentHex}33`,
+                  color: activeCharacter.accentHex,
+                }}
+              >
                 {interestCount}
               </span>
             )}
@@ -268,7 +351,7 @@ export function HeroSection({
           type="button"
           onClick={() => onStepDossier(1)}
           aria-label="Scroll or click to cycle character dossiers"
-          className="mt-[clamp(0.375rem,1.5dvh,1.25rem)] inline-flex min-h-[36px] items-center gap-1.5 px-3 py-1 text-[clamp(0.5625rem,1.3vw,0.625rem)] font-semibold tracking-[0.24em] text-emerald-200/65 uppercase transition hover:text-emerald-200 focus-visible:outline-2 focus-visible:outline-emerald-400"
+          className="mt-[clamp(0.25rem,1.1dvh,1rem)] inline-flex min-h-[32px] items-center gap-1.5 px-3 py-1 text-[clamp(0.5625rem,1.3vw,0.625rem)] font-semibold tracking-[0.24em] text-emerald-200/65 uppercase transition hover:text-emerald-200 sm:min-h-[36px] focus-visible:outline-2 focus-visible:outline-emerald-400"
         >
           <span>Scroll to switch dossier</span>
           <ChevronDown className="h-3.5 w-3.5 animate-bounce text-emerald-400/80" />

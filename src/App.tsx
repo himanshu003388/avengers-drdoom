@@ -87,12 +87,20 @@ export default function App() {
     let wheelResetTimer: number | null = null;
     let targetProgress = 0;
     let currentProgress = 0;
-    let pendingSwitchToThor = false;
+    let pendingSwitchDir: 1 | -1 | null = null;
     let rafId = 0;
     let lastTime = performance.now();
 
+    const isZoomDossier = (id: string) =>
+      id === 'doctor-doom' ||
+      id === 'scarlet-nexus' ||
+      id === 'captain-america' ||
+      id === 'mister-fantastic';
+
     const getZoomEl = () =>
-      containerRef.current?.querySelector<HTMLElement>('[data-doom-zoom="true"]') ?? null;
+      containerRef.current?.querySelector<HTMLElement>(
+        `[data-zoom-id="${activeCharacterIdRef.current}"]`
+      ) ?? null;
 
     const applyProgress = (progress: number) => {
       const zoomEl = getZoomEl();
@@ -105,7 +113,7 @@ export default function App() {
       const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
       lastTime = now;
 
-      const speed = pendingSwitchToThor ? 9 : 6.5;
+      const speed = pendingSwitchDir !== null ? 9 : 6.5;
       const ease = 1 - Math.exp(-speed * dt);
       currentProgress += (targetProgress - currentProgress) * ease;
 
@@ -115,15 +123,16 @@ export default function App() {
 
       applyProgress(currentProgress);
 
-      if (pendingSwitchToThor && currentProgress >= 0.99) {
-        pendingSwitchToThor = false;
+      if (pendingSwitchDir !== null && currentProgress >= 0.99) {
+        const dir = pendingSwitchDir;
+        pendingSwitchDir = null;
         wheelAccum = 0;
         targetProgress = 0;
         currentProgress = 0;
         rafId = 0;
-        // Keep DOM transform at 1.11 so Doom stays zoomed while fading out into Thor
+        // Keep DOM transform at 1.11 so the outgoing character stays zoomed while fading out
         applyProgress(1);
-        stepDossier(1, 1200);
+        stepDossier(dir, 1200);
         return;
       }
 
@@ -155,7 +164,7 @@ export default function App() {
         window.clearTimeout(wheelResetTimer);
       }
       wheelResetTimer = window.setTimeout(() => {
-        if (!pendingSwitchToThor) {
+        if (pendingSwitchDir === null) {
           wheelAccum = 0;
           setScrollProgress(0);
         }
@@ -163,7 +172,7 @@ export default function App() {
       }, 550);
     };
 
-    const triggerThorTransition = () => {
+    const triggerZoomTransition = (dir: 1 | -1) => {
       if (wheelResetTimer !== null) {
         window.clearTimeout(wheelResetTimer);
         wheelResetTimer = null;
@@ -173,15 +182,15 @@ export default function App() {
         targetProgress = 0;
         currentProgress = 0;
         applyProgress(1);
-        stepDossier(1, 1200);
+        stepDossier(dir, 1200);
         return;
       }
-      pendingSwitchToThor = true;
+      pendingSwitchDir = dir;
       setScrollProgress(1);
     };
 
     const handleWheel = (e: WheelEvent) => {
-      if (trailerOpen || e.ctrlKey || pendingSwitchToThor) return;
+      if (trailerOpen || e.ctrlKey || pendingSwitchDir !== null) return;
       const dy = e.deltaMode === 1 ? e.deltaY * 32 : e.deltaY;
       const dx = e.deltaMode === 1 ? e.deltaX * 32 : e.deltaX;
       if (Math.abs(dy) < Math.abs(dx)) return;
@@ -199,29 +208,26 @@ export default function App() {
 
       wheelAccum += dy;
 
-      if (activeCharacterIdRef.current === 'doctor-doom' && wheelAccum > 0) {
-        if (wheelAccum >= WHEEL_THRESHOLD) {
-          triggerThorTransition();
+      if (isZoomDossier(activeCharacterIdRef.current) && wheelAccum !== 0) {
+        const dir: 1 | -1 = wheelAccum > 0 ? 1 : -1;
+        const absAccum = Math.abs(wheelAccum);
+        if (absAccum >= WHEEL_THRESHOLD) {
+          triggerZoomTransition(dir);
           return;
         }
-        setScrollProgress(wheelAccum / WHEEL_THRESHOLD);
+        setScrollProgress(absAccum / WHEEL_THRESHOLD);
         scheduleWheelReset();
-      } else {
-        if (activeCharacterIdRef.current === 'doctor-doom') {
-          setScrollProgress(0);
-        }
-        if (Math.abs(wheelAccum) >= WHEEL_THRESHOLD) {
-          const dir: 1 | -1 = wheelAccum > 0 ? 1 : -1;
-          wheelAccum = 0;
-          stepDossier(dir, 1200);
-        }
+      } else if (Math.abs(wheelAccum) >= WHEEL_THRESHOLD) {
+        const dir: 1 | -1 = wheelAccum > 0 ? 1 : -1;
+        wheelAccum = 0;
+        stepDossier(dir, 1200);
       }
     };
 
     const handleTouchStart = (e: TouchEvent) => {
-      if (trailerOpen || pendingSwitchToThor || e.touches.length !== 1) {
+      if (trailerOpen || pendingSwitchDir !== null || e.touches.length !== 1) {
         touchStartRef.current = null;
-        if (!pendingSwitchToThor && activeCharacterIdRef.current === 'doctor-doom') {
+        if (pendingSwitchDir === null && isZoomDossier(activeCharacterIdRef.current)) {
           setScrollProgress(0);
         }
         return;
@@ -233,29 +239,29 @@ export default function App() {
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      if (trailerOpen || pendingSwitchToThor || !touchStartRef.current || e.touches.length !== 1) return;
+      if (trailerOpen || pendingSwitchDir !== null || !touchStartRef.current || e.touches.length !== 1) return;
       if (performance.now() - lastScrollSwitchRef.current < 1100) return;
 
       const deltaX = touchStartRef.current.x - e.touches[0].clientX;
       const deltaY = touchStartRef.current.y - e.touches[0].clientY;
-      if (activeCharacterIdRef.current === 'doctor-doom' && deltaY > 0 && Math.abs(deltaY) >= Math.abs(deltaX)) {
-        setScrollProgress(deltaY / TOUCH_THRESHOLD);
-      } else if (activeCharacterIdRef.current === 'doctor-doom') {
+      if (isZoomDossier(activeCharacterIdRef.current) && Math.abs(deltaY) >= Math.abs(deltaX) && deltaY !== 0) {
+        setScrollProgress(Math.abs(deltaY) / TOUCH_THRESHOLD);
+      } else if (isZoomDossier(activeCharacterIdRef.current)) {
         setScrollProgress(0);
       }
     };
 
     const handleTouchCancel = () => {
       touchStartRef.current = null;
-      if (!pendingSwitchToThor && activeCharacterIdRef.current === 'doctor-doom') {
+      if (pendingSwitchDir === null && isZoomDossier(activeCharacterIdRef.current)) {
         setScrollProgress(0);
       }
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
-      if (trailerOpen || pendingSwitchToThor || !touchStartRef.current || e.changedTouches.length === 0) {
+      if (trailerOpen || pendingSwitchDir !== null || !touchStartRef.current || e.changedTouches.length === 0) {
         touchStartRef.current = null;
-        if (!pendingSwitchToThor && activeCharacterIdRef.current === 'doctor-doom') {
+        if (pendingSwitchDir === null && isZoomDossier(activeCharacterIdRef.current)) {
           setScrollProgress(0);
         }
         return;
@@ -265,16 +271,17 @@ export default function App() {
       touchStartRef.current = null;
 
       if (Math.abs(deltaY) < TOUCH_THRESHOLD || Math.abs(deltaY) < Math.abs(deltaX)) {
-        if (activeCharacterIdRef.current === 'doctor-doom') {
+        if (isZoomDossier(activeCharacterIdRef.current)) {
           setScrollProgress(0);
         }
         return;
       }
 
-      if (activeCharacterIdRef.current === 'doctor-doom' && deltaY > 0) {
-        triggerThorTransition();
+      const dir: 1 | -1 = deltaY > 0 ? 1 : -1;
+      if (isZoomDossier(activeCharacterIdRef.current)) {
+        triggerZoomTransition(dir);
       } else {
-        stepDossier(deltaY > 0 ? 1 : -1, 1100);
+        stepDossier(dir, 1100);
       }
     };
 
@@ -322,8 +329,9 @@ export default function App() {
   }, [stepDossier, trailerOpen]);
 
   useEffect(() => {
-    if (activeCharacterId !== 'doctor-doom') return;
-    const zoomEl = containerRef.current?.querySelector<HTMLElement>('[data-doom-zoom="true"]');
+    const zoomEl = containerRef.current?.querySelector<HTMLElement>(
+      `[data-zoom-id="${activeCharacterId}"]`
+    );
     if (zoomEl) {
       zoomEl.style.transform = 'translate3d(0, 0, 0) scale(1)';
     }
@@ -357,7 +365,7 @@ export default function App() {
   return (
     <div
       ref={containerRef}
-      className="relative h-dvh touch-none overflow-hidden overscroll-none bg-[#020503]"
+      className="relative flex h-dvh flex-col touch-none overflow-hidden overscroll-none bg-[#020503]"
     >
       {!preloaderDone && <CinematicPreloader onComplete={() => setPreloaderDone(true)} />}
 
@@ -396,7 +404,10 @@ export default function App() {
         onResetHome={() => selectCharacter(CHARACTERS[0].id)}
       />
 
-      <main className="relative z-20 h-dvh overflow-hidden" data-active-backdrop={activeCharacter.id}>
+      <main
+        className="relative z-20 flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto"
+        data-active-backdrop={activeCharacter.id}
+      >
         <HeroSection
           activeCharacter={activeCharacter}
           characters={CHARACTERS}
@@ -408,13 +419,13 @@ export default function App() {
 
       <TrailerModal open={trailerOpen} onClose={() => setTrailerOpen(false)} />
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-30 select-none text-center md:inset-x-auto md:right-[clamp(1rem,3vw,2rem)] md:bottom-[max(0.875rem,env(safe-area-inset-bottom))] md:text-right">
+      <footer className="pointer-events-none relative z-30 shrink-0 select-none px-[clamp(0.75rem,3vw,2rem)] pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-center md:pb-[max(0.875rem,env(safe-area-inset-bottom))] md:text-right">
         <p className="inline-flex items-center gap-1.5 text-[clamp(0.5625rem,1.2vw,0.625rem)] font-medium tracking-[0.2em] text-white/65 uppercase drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
           <span>Made with</span>
           <Heart className="h-3 w-3 fill-white text-white" aria-label="white heart" />
           <span>by Himanshu Sahani</span>
         </p>
-      </div>
+      </footer>
     </div>
   );
 }

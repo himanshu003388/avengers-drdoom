@@ -136,14 +136,17 @@ export function BackgroundStage({
 
   const stageCharacters =
     activeCharacterOverride &&
-    !characters.some((c) => c.id === activeCharacterOverride.id)
+      !characters.some((c) => c.id === activeCharacterOverride.id)
       ? [...characters, activeCharacterOverride]
       : characters;
   const isThor = activeCharacter.id === 'scarlet-nexus';
+  const isMisterFantastic = activeCharacter.id === 'mister-fantastic';
 
   return (
     <div
-      className="pointer-events-none fixed inset-0 z-0 overflow-hidden bg-[#020503]"
+      className={`pointer-events-none fixed inset-0 z-0 overflow-hidden transition-colors duration-700 ${
+        isThor ? 'bg-[#060501]' : isMisterFantastic ? 'bg-[#02050a]' : 'bg-[#020503]'
+      }`}
       aria-hidden="true"
       data-testid="background-stage"
       data-active-character={activeCharacterId}
@@ -156,9 +159,15 @@ export function BackgroundStage({
         style={{
           transform: 'translate3d(0px, 0px, -40px) scale(1.12)',
           background: `
-            radial-gradient(ellipse 48% 54% at 52% 40%, ${activeCharacter.accentHex}38 0%, rgba(16, 84, 44, 0.28) 42%, rgba(2, 5, 3, 0) 74%),
-            radial-gradient(ellipse 88% 68% at 50% 92%, rgba(22, 118, 60, 0.26) 0%, rgba(2, 5, 3, 0) 72%),
-            linear-gradient(180deg, #020503 0%, #041209 48%, #020503 100%)
+            radial-gradient(ellipse 48% 54% at 52% 40%, ${activeCharacter.accentHex}38 0%, ${activeCharacter.accentHex}1f 42%, rgba(2, 5, 3, 0) 74%),
+            radial-gradient(ellipse 88% 68% at 50% 92%, ${activeCharacter.accentHex}29 0%, rgba(2, 5, 3, 0) 72%),
+            ${
+              isThor
+                ? 'linear-gradient(180deg, #060501 0%, #1c1603 48%, #060501 100%)'
+                : isMisterFantastic
+                  ? 'linear-gradient(180deg, #02050a 0%, #041224 48%, #02050a 100%)'
+                  : 'linear-gradient(180deg, #020503 0%, #041209 48%, #020503 100%)'
+            }
           `,
         }}
       >
@@ -180,26 +189,36 @@ export function BackgroundStage({
             height={768}
             decoding="async"
             fetchPriority="low"
-            className="pointer-events-none h-full w-full object-cover object-center opacity-75 mix-blend-lighten"
+            style={
+              isThor
+                ? { filter: 'sepia(1) saturate(3.2) hue-rotate(10deg) brightness(0.95)' }
+                : isMisterFantastic
+                  ? { filter: 'hue-rotate(62deg) saturate(1.15) brightness(0.96)' }
+                  : undefined
+            }
+            className="pointer-events-none h-full w-full object-cover object-center opacity-75 mix-blend-lighten transition-[filter] duration-700"
           />
         </div>
 
         <div
           className="pointer-events-none absolute inset-0"
           style={{
-            background:
-              'radial-gradient(ellipse 75% 65% at 50% var(--stage-center-y), rgba(2, 5, 3, 0.14) 0%, rgba(2, 5, 3, 0.58) 72%, rgba(2, 5, 3, 0.92) 100%)',
+            background: isThor
+              ? 'radial-gradient(ellipse 75% 65% at 50% var(--stage-center-y), rgba(6, 5, 1, 0.14) 0%, rgba(6, 5, 1, 0.58) 72%, rgba(6, 5, 1, 0.92) 100%)'
+              : isMisterFantastic
+                ? 'radial-gradient(ellipse 75% 65% at 50% var(--stage-center-y), rgba(2, 5, 10, 0.14) 0%, rgba(2, 5, 10, 0.58) 72%, rgba(2, 5, 10, 0.92) 100%)'
+                : 'radial-gradient(ellipse 75% 65% at 50% var(--stage-center-y), rgba(2, 5, 3, 0.14) 0%, rgba(2, 5, 3, 0.58) 72%, rgba(2, 5, 3, 0.92) 100%)',
           }}
         />
 
-        {/* Soft volumetric emerald plumes (gradient-feathered without expensive CSS blur) */}
+        {/* Soft volumetric plumes tinted to active character (gradient-feathered without expensive CSS blur) */}
         <div
           className="animate-doom-fume-drift pointer-events-none absolute inset-0 will-change-transform"
           style={{
             background: `
-              radial-gradient(ellipse 52% 44% at 32% 74%, rgba(22, 132, 66, 0.28) 0%, rgba(10, 56, 28, 0.1) 48%, transparent 74%),
-              radial-gradient(ellipse 56% 46% at 68% 72%, rgba(34, 170, 88, 0.24) 0%, rgba(10, 56, 28, 0.1) 48%, transparent 74%),
-              radial-gradient(ellipse 64% 38% at 50% 88%, rgba(28, 152, 76, 0.3) 0%, rgba(6, 36, 18, 0.12) 54%, transparent 80%)
+              radial-gradient(ellipse 52% 44% at 32% 74%, ${activeCharacter.accentHex}47 0%, ${activeCharacter.accentHex}1a 48%, transparent 74%),
+              radial-gradient(ellipse 56% 46% at 68% 72%, ${activeCharacter.accentHex}3d 0%, ${activeCharacter.accentHex}1a 48%, transparent 74%),
+              radial-gradient(ellipse 64% 38% at 50% 88%, ${activeCharacter.accentHex}4d 0%, ${activeCharacter.accentHex}1f 54%, transparent 80%)
             `,
           }}
         />
@@ -272,11 +291,10 @@ export function BackgroundStage({
 
       {/* Optional Thor lightning layer (crossfades smoothly when Thor dossier is selected) */}
       <div
-        className={`pointer-events-none absolute inset-0 transition-opacity duration-[900ms] ease-in-out ${
-          isThor ? 'opacity-100' : 'opacity-0'
-        }`}
+        className={`pointer-events-none absolute inset-0 transition-opacity duration-[900ms] ease-in-out ${isThor ? 'opacity-100' : 'opacity-0'
+          }`}
       >
-        <ThorLightning active={isThor} phase="blue" paused={paused} />
+        <ThorLightning active={isThor} phase="yellow" paused={paused} />
       </div>
 
       {/* Layer 2: Detached 3D Subject Plane (all dossiers pre-mounted for instant crossfade) */}
@@ -297,9 +315,8 @@ export function BackgroundStage({
           return (
             <div
               key={character.id}
-              className={`absolute inset-0 transition-opacity duration-[900ms] ease-in-out will-change-[opacity] ${
-                isActive ? 'opacity-100' : 'opacity-0'
-              }`}
+              className={`absolute inset-0 transition-opacity duration-[900ms] ease-in-out will-change-[opacity] ${isActive ? 'opacity-100' : 'opacity-0'
+                }`}
             >
               {!charHasFailed && character.imageUrl ? (
                 <div
@@ -307,22 +324,30 @@ export function BackgroundStage({
                   style={
                     charIsCutout
                       ? {
-                          maskImage: 'linear-gradient(to bottom, black 62%, transparent 97%)',
-                          WebkitMaskImage:
-                            'linear-gradient(to bottom, black 62%, transparent 97%)',
-                        }
+                        maskImage:
+                          'linear-gradient(to bottom, transparent 0%, black 12%, black 64%, transparent 97%), linear-gradient(to right, transparent 0%, black 14%, black 86%, transparent 100%)',
+                        WebkitMaskImage:
+                          'linear-gradient(to bottom, transparent 0%, black 12%, black 64%, transparent 97%), linear-gradient(to right, transparent 0%, black 14%, black 86%, transparent 100%)',
+                        maskComposite: 'intersect',
+                        WebkitMaskComposite: 'source-in',
+                      }
                       : {
-                          maskImage:
-                            'radial-gradient(ellipse 68% 68% at 50% 48%, black 52%, transparent 96%)',
-                          WebkitMaskImage:
-                            'radial-gradient(ellipse 68% 68% at 50% 48%, black 52%, transparent 96%)',
-                        }
+                        maskImage:
+                          'radial-gradient(ellipse 68% 68% at 50% 48%, black 52%, transparent 96%)',
+                        WebkitMaskImage:
+                          'radial-gradient(ellipse 68% 68% at 50% 48%, black 52%, transparent 96%)',
+                      }
                   }
                 >
                   <div
+                    data-zoom-id={character.id}
                     data-doom-zoom={character.id === 'doctor-doom' ? 'true' : undefined}
                     className={`h-full w-full will-change-transform motion-reduce:transition-none ${
-                      character.id === 'doctor-doom' && isActive
+                      (character.id === 'doctor-doom' ||
+                        character.id === 'scarlet-nexus' ||
+                        character.id === 'captain-america' ||
+                        character.id === 'mister-fantastic') &&
+                      isActive
                         ? ''
                         : 'transition-transform duration-[900ms] ease-out'
                     }`}
@@ -352,9 +377,8 @@ export function BackgroundStage({
                       style={
                         charIsCutout ? { filter: 'contrast(1.05) brightness(1.03)' } : undefined
                       }
-                      className={`h-full w-full object-contain object-center ${
-                        character.imageScaleClass ?? ''
-                      }`}
+                      className={`h-full w-full object-contain object-center ${character.imageScaleClass ?? ''
+                        }`}
                     />
                   </div>
                 </div>
@@ -395,9 +419,25 @@ export function BackgroundStage({
         }}
       />
 
-      {/* Contrast scrims keeping Doctor Doom clear */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#020503]/20 via-transparent to-[#020503]/85" />
-      <div className="absolute inset-0 bg-gradient-to-r from-[#020503]/35 via-transparent to-[#020503]/35" />
+      {/* Contrast scrims keeping active subject clear */}
+      <div
+        className={`absolute inset-0 transition-colors duration-700 ${
+          isThor
+            ? 'bg-gradient-to-b from-[#060501]/20 via-transparent to-[#060501]/85'
+            : isMisterFantastic
+              ? 'bg-gradient-to-b from-[#02050a]/20 via-transparent to-[#02050a]/85'
+              : 'bg-gradient-to-b from-[#020503]/20 via-transparent to-[#020503]/85'
+        }`}
+      />
+      <div
+        className={`absolute inset-0 transition-colors duration-700 ${
+          isThor
+            ? 'bg-gradient-to-r from-[#060501]/35 via-transparent to-[#060501]/35'
+            : isMisterFantastic
+              ? 'bg-gradient-to-r from-[#02050a]/35 via-transparent to-[#02050a]/35'
+              : 'bg-gradient-to-r from-[#020503]/35 via-transparent to-[#020503]/35'
+        }`}
+      />
     </div>
   );
 }

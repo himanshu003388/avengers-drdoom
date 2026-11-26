@@ -9,8 +9,8 @@ interface NavbarProps {
 
 export function Navbar({ soundEnabled, onToggleSound, onResetHome }: NavbarProps) {
   return (
-    <header className="fixed inset-x-0 top-0 z-40 border-b border-emerald-500/10 bg-[#020503]/90 md:bg-[#020503]/60 md:backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-[clamp(0.75rem,3vw,1.5rem)] pb-[clamp(0.5rem,1.2dvh,0.75rem)] pt-[max(clamp(0.5rem,1.2dvh,0.75rem),env(safe-area-inset-top))]">
+    <header className="relative z-40 shrink-0 border-b border-emerald-500/10 bg-[#020503]/90 md:bg-[#020503]/60 md:backdrop-blur-md">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-[clamp(0.75rem,3vw,1.5rem)] pb-[clamp(0.4rem,1dvh,0.75rem)] pt-[max(clamp(0.4rem,1dvh,0.75rem),env(safe-area-inset-top))]">
         <a
           href="#overview"
           onClick={(e) => {

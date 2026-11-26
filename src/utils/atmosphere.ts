@@ -4,10 +4,13 @@ export type EmberTint =
   | 'emerald'
   | 'chartreuse'
   | 'cyan-emerald'
-  | 'electric-blue';
+  | 'electric-blue'
+  | 'electric-yellow';
 
 export function getEmberTintColor(tint: EmberTint): [number, number, number] {
   switch (tint) {
+    case 'electric-yellow':
+      return [0.98, 0.8, 0.08];
     case 'electric-blue':
       return [0.22, 0.74, 0.98];
     case 'cyan-emerald':
