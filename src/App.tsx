@@ -4,7 +4,7 @@
  */
 
 import { Heart } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AtmosphericCanvas } from './components/AtmosphericCanvas';
 import { BackgroundStage } from './components/BackgroundStage';
 import { CinematicOverlay } from './components/CinematicOverlay';
@@ -30,7 +30,7 @@ export default function App() {
   activeCharacterIdRef.current = activeCharacterId;
   const surgeTimeoutRef = useRef<number | null>(null);
   const lastScrollSwitchRef = useRef<number>(0);
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   const activeCharacter: CharacterProfile =
     CHARACTERS.find((c) => c.id === activeCharacterId) ?? CHARACTERS[0];
@@ -79,7 +79,10 @@ export default function App() {
 
   useEffect(() => {
     const WHEEL_THRESHOLD = 280;
-    const TOUCH_THRESHOLD = 110;
+    const TOUCH_THRESHOLD = 56;
+    const FLICK_MIN_DISTANCE = 28;
+    const FLICK_MAX_MS = 260;
+    const TOUCH_COOLDOWN_MS = 650;
     const MAX_EXTRA_SCALE = 0.11;
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let wheelAccum = 0;
@@ -88,6 +91,7 @@ export default function App() {
     let targetProgress = 0;
     let currentProgress = 0;
     let pendingSwitchDir: 1 | -1 | null = null;
+    let isTouchDragging = false;
     let rafId = 0;
     let lastTime = performance.now();
 
@@ -113,7 +117,7 @@ export default function App() {
       const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
       lastTime = now;
 
-      const speed = pendingSwitchDir !== null ? 9 : 6.5;
+      const speed = pendingSwitchDir !== null ? 11 : isTouchDragging ? 18 : 6.5;
       const ease = 1 - Math.exp(-speed * dt);
       currentProgress += (targetProgress - currentProgress) * ease;
 
@@ -132,7 +136,7 @@ export default function App() {
         rafId = 0;
         // Keep DOM transform at 1.11 so the outgoing character stays zoomed while fading out
         applyProgress(1);
-        stepDossier(dir, 1200);
+        stepDossier(dir, TOUCH_COOLDOWN_MS);
         return;
       }
 
@@ -226,21 +230,24 @@ export default function App() {
 
     const handleTouchStart = (e: TouchEvent) => {
       if (trailerOpen || pendingSwitchDir !== null || e.touches.length !== 1) {
+        isTouchDragging = false;
         touchStartRef.current = null;
         if (pendingSwitchDir === null && isZoomDossier(activeCharacterIdRef.current)) {
           setScrollProgress(0);
         }
         return;
       }
+      isTouchDragging = true;
       touchStartRef.current = {
         x: e.touches[0].clientX,
         y: e.touches[0].clientY,
+        time: performance.now(),
       };
     };
 
     const handleTouchMove = (e: TouchEvent) => {
       if (trailerOpen || pendingSwitchDir !== null || !touchStartRef.current || e.touches.length !== 1) return;
-      if (performance.now() - lastScrollSwitchRef.current < 1100) return;
+      if (performance.now() - lastScrollSwitchRef.current < TOUCH_COOLDOWN_MS) return;
 
       const deltaX = touchStartRef.current.x - e.touches[0].clientX;
       const deltaY = touchStartRef.current.y - e.touches[0].clientY;
@@ -252,6 +259,7 @@ export default function App() {
     };
 
     const handleTouchCancel = () => {
+      isTouchDragging = false;
       touchStartRef.current = null;
       if (pendingSwitchDir === null && isZoomDossier(activeCharacterIdRef.current)) {
         setScrollProgress(0);
@@ -259,6 +267,7 @@ export default function App() {
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
+      isTouchDragging = false;
       if (trailerOpen || pendingSwitchDir !== null || !touchStartRef.current || e.changedTouches.length === 0) {
         touchStartRef.current = null;
         if (pendingSwitchDir === null && isZoomDossier(activeCharacterIdRef.current)) {
@@ -268,9 +277,15 @@ export default function App() {
       }
       const deltaX = touchStartRef.current.x - e.changedTouches[0].clientX;
       const deltaY = touchStartRef.current.y - e.changedTouches[0].clientY;
+      const elapsedMs = performance.now() - touchStartRef.current.time;
       touchStartRef.current = null;
 
-      if (Math.abs(deltaY) < TOUCH_THRESHOLD || Math.abs(deltaY) < Math.abs(deltaX)) {
+      const absY = Math.abs(deltaY);
+      const absX = Math.abs(deltaX);
+      const isQuickFlick = absY >= FLICK_MIN_DISTANCE && elapsedMs <= FLICK_MAX_MS;
+      const meetsDistance = absY >= TOUCH_THRESHOLD || isQuickFlick;
+
+      if (!meetsDistance || absY < absX) {
         if (isZoomDossier(activeCharacterIdRef.current)) {
           setScrollProgress(0);
         }
@@ -281,7 +296,7 @@ export default function App() {
       if (isZoomDossier(activeCharacterIdRef.current)) {
         triggerZoomTransition(dir);
       } else {
-        stepDossier(dir, 1100);
+        stepDossier(dir, TOUCH_COOLDOWN_MS);
       }
     };
 
@@ -328,7 +343,7 @@ export default function App() {
     };
   }, [stepDossier, trailerOpen]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const zoomEl = containerRef.current?.querySelector<HTMLElement>(
       `[data-zoom-id="${activeCharacterId}"]`
     );

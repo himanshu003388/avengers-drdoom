@@ -155,9 +155,9 @@ export function BackgroundStage({
       {/* Layer 1: Deep Counter-Parallax Latverian Backlight & Soft Volumetric Glow */}
       <div
         ref={deepPlaneRef}
-        className="absolute inset-0 will-change-transform"
+        className={`absolute inset-0 ${isLowSpecViewport ? '' : 'will-change-transform'}`}
         style={{
-          transform: 'translate3d(0px, 0px, -40px) scale(1.12)',
+          transform: isLowSpecViewport ? undefined : 'translate3d(0px, 0px, -40px) scale(1.12)',
           background: `
             radial-gradient(ellipse 48% 54% at 52% 40%, ${activeCharacter.accentHex}38 0%, ${activeCharacter.accentHex}1f 42%, rgba(2, 5, 3, 0) 74%),
             radial-gradient(ellipse 88% 68% at 50% 92%, ${activeCharacter.accentHex}29 0%, rgba(2, 5, 3, 0) 72%),
@@ -190,13 +190,17 @@ export function BackgroundStage({
             decoding="async"
             fetchPriority="low"
             style={
-              isThor
-                ? { filter: 'sepia(1) saturate(3.2) hue-rotate(10deg) brightness(0.95)' }
-                : isMisterFantastic
-                  ? { filter: 'hue-rotate(62deg) saturate(1.15) brightness(0.96)' }
-                  : undefined
+              isLowSpecViewport
+                ? undefined
+                : isThor
+                  ? { filter: 'sepia(1) saturate(3.2) hue-rotate(10deg) brightness(0.95)' }
+                  : isMisterFantastic
+                    ? { filter: 'hue-rotate(62deg) saturate(1.15) brightness(0.96)' }
+                    : undefined
             }
-            className="pointer-events-none h-full w-full object-cover object-center opacity-75 mix-blend-lighten transition-[filter] duration-700"
+            className={`pointer-events-none h-full w-full object-cover object-center ${
+              isLowSpecViewport ? 'opacity-55' : 'opacity-75 mix-blend-lighten'
+            }`}
           />
         </div>
 
@@ -300,12 +304,16 @@ export function BackgroundStage({
       {/* Layer 2: Detached 3D Subject Plane (all dossiers pre-mounted for instant crossfade) */}
       <div
         ref={subjectPlaneRef}
-        className="absolute inset-0 will-change-transform"
-        style={{
-          transform:
-            'perspective(1050px) rotateX(0deg) rotateY(0deg) translate3d(0px, 0px, 32px) scale(1.04)',
-          transformStyle: 'preserve-3d',
-        }}
+        className={`absolute inset-0 ${isLowSpecViewport ? '' : 'will-change-transform'}`}
+        style={
+          isLowSpecViewport
+            ? undefined
+            : {
+                transform:
+                  'perspective(1050px) rotateX(0deg) rotateY(0deg) translate3d(0px, 0px, 32px) scale(1.04)',
+                transformStyle: 'preserve-3d',
+              }
+        }
       >
         {stageCharacters.map((character) => {
           const isActive = character.id === activeCharacter.id;
@@ -315,41 +323,44 @@ export function BackgroundStage({
           return (
             <div
               key={character.id}
-              className={`absolute inset-0 transition-opacity duration-[900ms] ease-in-out will-change-[opacity] ${isActive ? 'opacity-100' : 'opacity-0'
-                }`}
+              className={`absolute inset-0 transition-opacity duration-[700ms] ease-out md:duration-[900ms] md:ease-in-out ${
+                isActive ? 'opacity-100' : 'opacity-0'
+              }`}
             >
               {!charHasFailed && character.imageUrl ? (
                 <div
                   className="absolute left-1/2 top-[var(--stage-center-y)] h-[min(48dvh,92vw)] w-[min(164vw,86dvh)] -translate-x-1/2 -translate-y-1/2 md:h-[min(66dvh,78vw)] md:w-[min(122vw,120dvh)] lg:h-[min(87dvh,74vw)] lg:w-[min(106vw,156dvh)]"
                   style={
-                    charIsCutout
+                    charIsCutout && !isLowSpecViewport
                       ? {
-                        maskImage:
-                          'linear-gradient(to bottom, transparent 0%, black 12%, black 64%, transparent 97%), linear-gradient(to right, transparent 0%, black 14%, black 86%, transparent 100%)',
-                        WebkitMaskImage:
-                          'linear-gradient(to bottom, transparent 0%, black 12%, black 64%, transparent 97%), linear-gradient(to right, transparent 0%, black 14%, black 86%, transparent 100%)',
-                        maskComposite: 'intersect',
-                        WebkitMaskComposite: 'source-in',
-                      }
+                          maskImage:
+                            'linear-gradient(to bottom, transparent 0%, black 12%, black 64%, transparent 97%), linear-gradient(to right, transparent 0%, black 14%, black 86%, transparent 100%)',
+                          WebkitMaskImage:
+                            'linear-gradient(to bottom, transparent 0%, black 12%, black 64%, transparent 97%), linear-gradient(to right, transparent 0%, black 14%, black 86%, transparent 100%)',
+                          maskComposite: 'intersect',
+                          WebkitMaskComposite: 'source-in',
+                        }
                       : {
-                        maskImage:
-                          'radial-gradient(ellipse 68% 68% at 50% 48%, black 52%, transparent 96%)',
-                        WebkitMaskImage:
-                          'radial-gradient(ellipse 68% 68% at 50% 48%, black 52%, transparent 96%)',
-                      }
+                          maskImage:
+                            'radial-gradient(ellipse 60% 58% at 50% 45%, black 46%, rgba(0, 0, 0, 0.72) 72%, transparent 96%)',
+                          WebkitMaskImage:
+                            'radial-gradient(ellipse 60% 58% at 50% 45%, black 46%, rgba(0, 0, 0, 0.72) 72%, transparent 96%)',
+                        }
                   }
                 >
                   <div
                     data-zoom-id={character.id}
                     data-doom-zoom={character.id === 'doctor-doom' ? 'true' : undefined}
-                    className={`h-full w-full will-change-transform motion-reduce:transition-none ${
+                    className={`h-full w-full motion-reduce:transition-none ${
+                      isActive ? 'will-change-transform' : ''
+                    } ${
                       (character.id === 'doctor-doom' ||
                         character.id === 'scarlet-nexus' ||
                         character.id === 'captain-america' ||
                         character.id === 'mister-fantastic') &&
                       isActive
                         ? ''
-                        : 'transition-transform duration-[900ms] ease-out'
+                        : 'transition-transform duration-[700ms] ease-out md:duration-[900ms]'
                     }`}
                     style={
                       character.id === 'doctor-doom' && isThor
@@ -375,7 +386,9 @@ export function BackgroundStage({
                         }))
                       }
                       style={
-                        charIsCutout ? { filter: 'contrast(1.05) brightness(1.03)' } : undefined
+                        charIsCutout && !isLowSpecViewport
+                          ? { filter: 'contrast(1.05) brightness(1.03)' }
+                          : undefined
                       }
                       className={`h-full w-full object-contain object-center ${character.imageScaleClass ?? ''
                         }`}
@@ -413,7 +426,9 @@ export function BackgroundStage({
       {/* Layer 3: Static Pre-Painted Rim-Light Sheen (translated on GPU only) */}
       <div
         ref={sheenPlaneRef}
-        className="pointer-events-none absolute -inset-1/4 mix-blend-screen will-change-transform"
+        className={`pointer-events-none absolute -inset-1/4 ${
+          isLowSpecViewport ? '' : 'mix-blend-screen will-change-transform'
+        }`}
         style={{
           background: `radial-gradient(circle 480px at 50% var(--stage-center-y), ${activeCharacter.accentHex}22 0%, ${activeCharacter.accentHex}0a 45%, rgba(2, 5, 3, 0) 76%)`,
         }}

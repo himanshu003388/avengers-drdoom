@@ -109,7 +109,7 @@ export function DoomsdayWebGLScene({ accentHex, mode, paused = false }: Doomsday
     }
     window.addEventListener('resize', syncSize, { passive: true });
 
-    const minFrameMs = 0;
+    const minFrameMs = isCoarsePointer ? 32 : 0;
     let rafId = 0;
     let lastTime = performance.now();
     let lastRenderTime = lastTime;
