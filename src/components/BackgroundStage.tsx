@@ -152,6 +152,8 @@ export function BackgroundStage({
   return (
     <div
       className={`pointer-events-none fixed inset-0 z-0 overflow-hidden transition-colors duration-700 ${
+        paused ? 'doom-stage-paused ' : ''
+      }${
         isThor ? 'bg-[#060501]' : isMisterFantastic ? 'bg-[#02050a]' : 'bg-[#020503]'
       }`}
       aria-hidden="true"
@@ -187,22 +189,22 @@ export function BackgroundStage({
               'radial-gradient(ellipse 58% 58% at 50% 50%, black 42%, rgba(0, 0, 0, 0.72) 68%, transparent 96%)',
           }}
         >
-          <img
-            src="/assets/aistudio/emerald-sacred-geometry-bg.webp"
-            srcSet="/assets/aistudio/emerald-sacred-geometry-bg-960.webp 960w, /assets/aistudio/emerald-sacred-geometry-bg.webp 1376w"
-            sizes="100vw"
-            alt=""
-            width={1376}
-            height={768}
-            decoding="async"
-            fetchPriority="low"
-            style={geometryFilter ? { filter: geometryFilter } : undefined}
-            className={`pointer-events-none h-full w-full object-cover object-center ${
-              isLowSpecViewport
-                ? 'animate-doom-geometry-drift opacity-55'
-                : 'opacity-75 mix-blend-lighten'
-            }`}
-          />
+          <div className="animate-doom-geometry-drift h-full w-full will-change-transform">
+            <img
+              src="/assets/aistudio/emerald-sacred-geometry-bg.webp"
+              srcSet="/assets/aistudio/emerald-sacred-geometry-bg-960.webp 960w, /assets/aistudio/emerald-sacred-geometry-bg.webp 1376w"
+              sizes="100vw"
+              alt=""
+              width={1376}
+              height={768}
+              decoding="async"
+              fetchPriority="low"
+              style={geometryFilter ? { filter: geometryFilter } : undefined}
+              className={`pointer-events-none h-full w-full object-cover object-center ${
+                isLowSpecViewport ? 'opacity-55' : 'opacity-75 mix-blend-lighten'
+              }`}
+            />
+          </div>
         </div>
 
         <div
@@ -305,9 +307,7 @@ export function BackgroundStage({
       {/* Layer 2: Detached 3D Subject Plane (all dossiers pre-mounted for instant crossfade) */}
       <div
         ref={subjectPlaneRef}
-        className={`absolute inset-0 ${
-          isLowSpecViewport ? 'animate-doom-mobile-float' : 'will-change-transform'
-        }`}
+        className={`absolute inset-0 ${isLowSpecViewport ? '' : 'will-change-transform'}`}
         style={
           isLowSpecViewport
             ? undefined
@@ -371,31 +371,33 @@ export function BackgroundStage({
                         : undefined
                     }
                   >
-                    <img
-                      src={character.imageUrl}
-                      srcSet={character.imageSrcSet}
-                      sizes={character.imageSizes}
-                      alt=""
-                      width={1600}
-                      height={900}
-                      loading="eager"
-                      decoding="async"
-                      fetchPriority={isActive ? 'high' : 'low'}
-                      referrerPolicy="no-referrer"
-                      onError={() =>
-                        setFailedImages((prev) => ({
-                          ...prev,
-                          [character.id]: true,
-                        }))
-                      }
-                      style={
-                        charIsCutout && !isLowSpecViewport
-                          ? { filter: 'contrast(1.05) brightness(1.03)' }
-                          : undefined
-                      }
-                      className={`h-full w-full object-contain object-center ${character.imageScaleClass ?? ''
-                        }`}
-                    />
+                    <div className={`h-full w-full ${isActive ? 'animate-doom-character-float' : ''}`}>
+                      <img
+                        src={character.imageUrl}
+                        srcSet={character.imageSrcSet}
+                        sizes={character.imageSizes}
+                        alt=""
+                        width={1600}
+                        height={900}
+                        loading="eager"
+                        decoding="async"
+                        fetchPriority={isActive ? 'high' : 'low'}
+                        referrerPolicy="no-referrer"
+                        onError={() =>
+                          setFailedImages((prev) => ({
+                            ...prev,
+                            [character.id]: true,
+                          }))
+                        }
+                        style={
+                          charIsCutout && !isLowSpecViewport
+                            ? { filter: 'contrast(1.05) brightness(1.03)' }
+                            : undefined
+                        }
+                        className={`h-full w-full object-contain object-center ${character.imageScaleClass ?? ''
+                          }`}
+                      />
+                    </div>
                   </div>
                 </div>
               ) : (

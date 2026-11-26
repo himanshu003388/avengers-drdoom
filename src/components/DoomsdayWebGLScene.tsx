@@ -36,6 +36,7 @@ export function DoomsdayWebGLScene({ accentHex, mode, paused = false }: Doomsday
   const targetRgbRef = useRef<[number, number, number]>(hexToRgb(accentHex));
   const modeRef = useRef(mode);
   const pausedRef = useRef(paused);
+  const resumeLoopRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     targetRgbRef.current = hexToRgb(accentHex);
@@ -47,6 +48,9 @@ export function DoomsdayWebGLScene({ accentHex, mode, paused = false }: Doomsday
 
   useEffect(() => {
     pausedRef.current = paused;
+    if (!paused) {
+      resumeLoopRef.current?.();
+    }
   }, [paused]);
 
   useEffect(() => {
@@ -188,11 +192,11 @@ export function DoomsdayWebGLScene({ accentHex, mode, paused = false }: Doomsday
       drawFrame(0);
     } else {
       const tick = (now: number) => {
-        if (document.hidden) {
+        if (document.hidden || pausedRef.current) {
           rafId = 0;
           return;
         }
-        if (pausedRef.current || (minFrameMs > 0 && now - lastRenderTime < minFrameMs)) {
+        if (minFrameMs > 0 && now - lastRenderTime < minFrameMs) {
           lastTime = now;
           rafId = window.requestAnimationFrame(tick);
           return;
@@ -205,18 +209,22 @@ export function DoomsdayWebGLScene({ accentHex, mode, paused = false }: Doomsday
       };
 
       const onVisibilityChange = () => {
-        if (!document.hidden && !rafId) {
+        if (!document.hidden && !pausedRef.current && !rafId) {
           lastTime = performance.now();
           lastRenderTime = lastTime;
           rafId = window.requestAnimationFrame(tick);
         }
       };
+      resumeLoopRef.current = onVisibilityChange;
 
       document.addEventListener('visibilitychange', onVisibilityChange);
       window.addEventListener('pageshow', onVisibilityChange);
-      rafId = window.requestAnimationFrame(tick);
+      if (!pausedRef.current) {
+        rafId = window.requestAnimationFrame(tick);
+      }
 
       return () => {
+        resumeLoopRef.current = null;
         window.cancelAnimationFrame(rafId);
         document.removeEventListener('visibilitychange', onVisibilityChange);
         window.removeEventListener('pageshow', onVisibilityChange);

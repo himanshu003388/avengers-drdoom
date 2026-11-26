@@ -42,6 +42,16 @@
     background-color: #020503;
     color: #e9f2ec;
   }
+
+  button,
+  a {
+    touch-action: manipulation;
+  }
+}
+
+.doom-stage-paused,
+.doom-stage-paused * {
+  animation-play-state: paused !important;
 }
 
 /* Official Doctor Doom deep dark Latverian emerald glow */
@@ -237,14 +247,14 @@
   }
 }
 
-@keyframes doomMobileFloat {
+@keyframes doomCharacterFloat {
   0%,
   100% {
-    transform: translate3d(0, -4px, 0) scale(1);
+    transform: translate3d(0, -5px, 0) scale(1);
   }
 
   50% {
-    transform: translate3d(0, 4px, 0) scale(1.018);
+    transform: translate3d(0, 5px, 0) scale(1.022);
   }
 }
 
@@ -272,8 +282,8 @@
   animation: doomGeometryDrift 18s ease-in-out infinite;
 }
 
-.animate-doom-mobile-float {
-  animation: doomMobileFloat 7.5s ease-in-out infinite;
+.animate-doom-character-float {
+  animation: doomCharacterFloat 7.5s ease-in-out infinite;
 }
 
 @keyframes gamePopText {
@@ -409,7 +419,7 @@
   .animate-doom-rays-spin,
   .animate-doom-fume-drift,
   .animate-doom-geometry-drift,
-  .animate-doom-mobile-float,
+  .animate-doom-character-float,
   .animate-play-btn-glow,
   .animate-play-btn-shimmer,
   .animate-play-icon-wiggle,

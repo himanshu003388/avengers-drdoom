@@ -545,7 +545,7 @@ export function DoomsdayGameModal({
       onClick={onClose}
     >
       <div
-        className={`doom-hud-card relative flex h-[min(86dvh,42rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border !bg-[#050c08] !backdrop-blur-none shadow-2xl ${
+        className={`doom-hud-card relative flex h-[min(86dvh,42rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border !bg-[#02050a] !backdrop-blur-none shadow-2xl ${
           bombFlash ? 'animate-game-bomb-shake' : ''
         }`}
         style={{
@@ -605,7 +605,7 @@ export function DoomsdayGameModal({
                   htmlFor="game-player-name"
                   className="block text-[11px] font-semibold tracking-[0.16em] text-white/85 uppercase"
                 >
-                  Register Your Name <span className="text-emerald-400">*</span>
+                  Register Your Name <span className="text-sky-400">*</span>
                 </label>
                 <input
                   id="game-player-name"
@@ -745,7 +745,7 @@ export function DoomsdayGameModal({
               className="relative min-h-0 flex-1 touch-manipulation select-none overflow-hidden"
               style={{
                 contain: 'layout style paint',
-                background: `radial-gradient(circle at 50% 55%, ${accentHex}16 0%, rgba(2, 5, 3, 0.95) 75%)`,
+                background: `radial-gradient(circle at 50% 55%, ${accentHex}1c 0%, rgba(2, 5, 10, 0.96) 75%)`,
               }}
             >
               {bubbles.map((b) => {

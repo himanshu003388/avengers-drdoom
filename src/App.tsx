@@ -125,10 +125,18 @@ export default function App() {
       id === 'captain-america' ||
       id === 'mister-fantastic';
 
-    const getZoomEl = () =>
-      containerRef.current?.querySelector<HTMLElement>(
-        `[data-zoom-id="${activeCharacterIdRef.current}"]`
-      ) ?? null;
+    let cachedZoomId = '';
+    let cachedZoomEl: HTMLElement | null = null;
+
+    const getZoomEl = () => {
+      const id = activeCharacterIdRef.current;
+      if (cachedZoomId !== id || !cachedZoomEl?.isConnected) {
+        cachedZoomId = id;
+        cachedZoomEl =
+          containerRef.current?.querySelector<HTMLElement>(`[data-zoom-id="${id}"]`) ?? null;
+      }
+      return cachedZoomEl;
+    };
 
     const applyProgress = (progress: number) => {
       const zoomEl = getZoomEl();
@@ -479,7 +487,7 @@ export default function App() {
 
       <DoomsdayGameModal
         open={gameOpen}
-        accentHex={activeCharacter.accentHex}
+        accentHex="#38BDF8"
         playerName={playerName}
         entries={leaderboardEntries}
         loadingLeaderboard={loadingLeaderboard}

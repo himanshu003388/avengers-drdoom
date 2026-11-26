@@ -102,6 +102,7 @@ export function AtmosphericCanvas({ mode, activeCharacter, paused = false }: Atm
   const intensityRef = useRef<number>(getShaderIntensity(mode));
   const tintRef = useRef<[number, number, number]>(getEmberTintColor(activeCharacter.emberTint));
   const pausedRef = useRef<boolean>(paused);
+  const resumeLoopRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     intensityRef.current = getShaderIntensity(mode);
@@ -113,6 +114,9 @@ export function AtmosphericCanvas({ mode, activeCharacter, paused = false }: Atm
 
   useEffect(() => {
     pausedRef.current = paused;
+    if (!paused) {
+      resumeLoopRef.current?.();
+    }
   }, [paused]);
 
   useEffect(() => {
@@ -289,11 +293,11 @@ export function AtmosphericCanvas({ mode, activeCharacter, paused = false }: Atm
     let elapsedSec = 0;
 
     const loop = (t: number) => {
-      if (document.hidden || contextLost) {
+      if (document.hidden || contextLost || pausedRef.current) {
         rafId = 0;
         return;
       }
-      if (pausedRef.current || (minFrameMs > 0 && t - lastRender < minFrameMs)) {
+      if (minFrameMs > 0 && t - lastRender < minFrameMs) {
         lastTick = t;
         rafId = window.requestAnimationFrame(loop);
         return;
@@ -309,12 +313,13 @@ export function AtmosphericCanvas({ mode, activeCharacter, paused = false }: Atm
     };
 
     const resumeIfVisible = () => {
-      if (!document.hidden && !contextLost && !prefersReducedMotion && !rafId) {
+      if (!document.hidden && !contextLost && !prefersReducedMotion && !pausedRef.current && !rafId) {
         lastTick = performance.now();
         lastRender = lastTick;
         rafId = window.requestAnimationFrame(loop);
       }
     };
+    resumeLoopRef.current = resumeIfVisible;
 
     const onContextLost = (e: Event) => {
       e.preventDefault();
@@ -354,6 +359,7 @@ export function AtmosphericCanvas({ mode, activeCharacter, paused = false }: Atm
     }
 
     return () => {
+      resumeLoopRef.current = null;
       window.cancelAnimationFrame(rafId);
       canvas.removeEventListener('webglcontextlost', onContextLost);
       canvas.removeEventListener('webglcontextrestored', onContextRestored);

@@ -67,28 +67,30 @@ export function Navbar({ onResetHome, onOpenGame }: NavbarProps) {
           type="button"
           onClick={onOpenGame}
           aria-label="Play Game and Top the Leaderboard"
-          className="animate-play-callout-bob absolute right-[clamp(0.75rem,3vw,1.5rem)] top-full z-30 mt-2 flex items-center gap-1.5 rounded-2xl border border-emerald-400/30 bg-[#05110a]/65 px-2.5 py-1.5 text-left shadow-[0_8px_22px_rgba(0,0,0,0.55),0_0_16px_rgba(34,197,94,0.18)] backdrop-blur-md transition hover:border-emerald-300/60 hover:bg-[#06180d]/80 md:hidden"
+          className="animate-play-callout-bob absolute right-[clamp(0.75rem,3vw,1.5rem)] top-full z-30 mt-2 inline-flex items-center gap-1.5 rounded-2xl border border-emerald-400/40 bg-[#05120a]/75 px-3 py-1.5 text-left shadow-[0_10px_26px_rgba(0,0,0,0.6),0_0_20px_rgba(34,197,94,0.24)] backdrop-blur-md transition hover:border-emerald-300/70 hover:bg-[#071b0f]/85 md:hidden"
         >
-          <span className="max-w-[8.75rem] text-[9.5px] font-semibold leading-tight tracking-[0.03em] text-emerald-100/95">
-            Play Game &amp; Top the Leaderboard
+          <span className="text-[11px] font-bold leading-snug tracking-[0.02em] text-emerald-50">
+            Play Game &amp;
+            <br />
+            Top Leaderboard
           </span>
           <svg
-            viewBox="0 0 28 24"
+            viewBox="0 1 25 22"
             fill="none"
-            className="h-5 w-6 shrink-0 text-emerald-400 drop-shadow-[0_0_6px_rgba(74,222,128,0.65)]"
+            className="h-5 w-6 shrink-0 text-emerald-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.75)]"
             aria-hidden="true"
           >
             <path
-              d="M3 19C11 19 19 14 21 4"
+              d="M2 18C10 18 17 13 19 4"
               stroke="currentColor"
-              strokeWidth="2"
+              strokeWidth="2.1"
               strokeLinecap="round"
               strokeDasharray="2.5 3"
             />
             <path
-              d="M16.5 7.5L21 3.5L24.5 8.5"
+              d="M14.8 7L19 3.2L22.5 7.8"
               stroke="currentColor"
-              strokeWidth="2"
+              strokeWidth="2.1"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
