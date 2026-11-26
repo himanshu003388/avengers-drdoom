@@ -277,7 +277,7 @@ export function HeroSection({
           })}
         </div>
 
-        <div className="mt-[clamp(0.375rem,1.4dvh,1.75rem)] w-full">
+        <div className="mt-[clamp(1rem,3.2dvh,3rem)] w-full">
           <CountdownTimer />
         </div>
 

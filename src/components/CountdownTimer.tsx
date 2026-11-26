@@ -33,7 +33,7 @@ export function CountdownTimer() {
   if (countdown.isReleased) {
     return (
       <div data-testid="release-countdown" className="py-2 text-center">
-        <p className="doom-timer-cutout text-3xl font-bold tracking-wider uppercase sm:text-5xl md:text-6xl">
+        <p className="doom-timer-cutout text-4xl font-bold tracking-wider uppercase sm:text-6xl md:text-7xl">
           In Theaters Now
         </p>
       </div>
@@ -50,20 +50,20 @@ export function CountdownTimer() {
   return (
     <div
       data-testid="release-countdown"
-      className="mx-auto flex w-full max-w-4xl flex-col items-center text-center"
+      className="mx-auto flex w-full max-w-5xl flex-col items-center text-center"
     >
-      <p className="mb-[clamp(0.375rem,1.2dvh,0.75rem)] text-[clamp(0.5625rem,1.6vw,0.75rem)] font-bold tracking-[clamp(0.16em,0.4vw,0.26em)] text-white/80 uppercase">
+      <p className="mb-[clamp(0.375rem,1.2dvh,0.75rem)] text-[clamp(0.6875rem,1.8vw,0.9375rem)] font-bold tracking-[clamp(0.16em,0.4vw,0.26em)] text-white/80 uppercase">
         In Theaters December 17
       </p>
 
       <div className="flex flex-nowrap items-baseline justify-center gap-x-[clamp(0.2rem,1.3vw,1rem)]">
         {units.map((unit, index) => (
           <div key={unit.label} className="flex items-baseline gap-x-[clamp(0.2rem,1.3vw,1rem)]">
-            <div className="flex w-[clamp(3.1rem,17vw,7.25rem)] shrink-0 flex-col items-center">
-              <span className="doom-timer-cutout w-full text-center text-[clamp(1.75rem,min(8vw,6dvh),4.5rem)] font-bold leading-none tracking-tight tabular-nums">
+            <div className="flex w-[clamp(3.75rem,19vw,9.5rem)] shrink-0 flex-col items-center">
+              <span className="doom-timer-cutout w-full text-center text-[clamp(2.25rem,min(10vw,9.5dvh),6.25rem)] font-bold leading-none tracking-tight tabular-nums">
                 {unit.value}
               </span>
-              <span className="doom-timer-label mt-[clamp(0.25rem,0.8dvh,0.5rem)] text-[clamp(0.5rem,1.6vw,0.75rem)] font-bold tracking-[clamp(0.1em,0.28vw,0.24em)] uppercase">
+              <span className="doom-timer-label mt-[clamp(0.25rem,0.8dvh,0.5rem)] text-[clamp(0.625rem,1.8vw,0.9375rem)] font-bold tracking-[clamp(0.1em,0.28vw,0.24em)] uppercase">
                 {unit.label}
               </span>
             </div>
@@ -71,7 +71,7 @@ export function CountdownTimer() {
             {index < units.length - 1 && (
               <span
                 aria-hidden="true"
-                className="doom-timer-cutout w-[clamp(0.6rem,2.4vw,1.5rem)] shrink-0 self-start pt-0.5 text-center text-[clamp(1.35rem,min(6vw,4.8dvh),3.75rem)] font-bold leading-none opacity-80"
+                className="doom-timer-cutout w-[clamp(0.75rem,2.6vw,2rem)] shrink-0 self-start pt-0.5 text-center text-[clamp(1.75rem,min(8vw,7.5dvh),5rem)] font-bold leading-none opacity-80"
               >
                 :
               </span>
