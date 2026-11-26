@@ -1,152 +1,49 @@
-import { Check, ChevronDown, Flame, Play } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Check, ChevronDown, Flame, Play, UserPlus, Users } from 'lucide-react';
 import type { CharacterProfile } from '../data/characters';
+import type { RsvpSubmission } from '../types/watchlist';
 import { soundEngine } from '../utils/sound';
 import { CountdownTimer } from './CountdownTimer';
-
-const API_INTERESTED_URL = '/api/interested';
-const ABACUS_GET_URL = 'https://abacus.jasoncameron.dev/get/avengers-doomsday-campus/interested';
-const ABACUS_HIT_URL = 'https://abacus.jasoncameron.dev/hit/avengers-doomsday-campus/interested';
-const VOTED_STORAGE_KEY = 'doomsday_campus_interested';
-const COUNT_STORAGE_KEY = 'doomsday_campus_interested_count';
-const FETCH_TIMEOUT_MS = 5000;
-
-async function fetchInterestCount(
-  mode: 'get' | 'increment',
-  signal: AbortSignal
-): Promise<number | null> {
-  const method = mode === 'increment' ? 'POST' : 'GET';
-
-  try {
-    const apiRes = await fetch(API_INTERESTED_URL, {
-      method,
-      cache: 'no-store',
-      signal,
-    });
-    const contentType = apiRes.headers.get('content-type') || '';
-    if (apiRes.ok && contentType.includes('application/json')) {
-      const data = (await apiRes.json()) as { count?: unknown };
-      if (typeof data.count === 'number' && Number.isFinite(data.count)) {
-        return data.count;
-      }
-    }
-  } catch (err) {
-    if (signal.aborted) throw err;
-  }
-
-  // Fallback for local Vite dev (where /api/* is not served)
-  const fallbackUrl = mode === 'increment' ? ABACUS_HIT_URL : ABACUS_GET_URL;
-  const fallbackRes = await fetch(fallbackUrl, { cache: 'no-store', signal });
-  if (mode === 'get' && fallbackRes.status === 404) {
-    return 0;
-  }
-  if (!fallbackRes.ok) {
-    return null;
-  }
-  const fallbackData = (await fallbackRes.json()) as { value?: unknown };
-  return typeof fallbackData.value === 'number' && Number.isFinite(fallbackData.value)
-    ? fallbackData.value
-    : null;
-}
 
 interface HeroSectionProps {
   activeCharacter: CharacterProfile;
   characters: CharacterProfile[];
+  interested: boolean;
+  interestCount: number;
+  rsvp: RsvpSubmission | null;
+  rosterCount: number;
   onSurgeAtmosphere: () => void;
   onOpenTrailer: () => void;
+  onOpenInterest: () => void;
+  onOpenWatchlist: () => void;
   onStepDossier: (direction: 1 | -1) => void;
 }
 
 export function HeroSection({
   activeCharacter,
   characters,
+  interested,
+  interestCount,
+  rsvp,
+  rosterCount,
   onSurgeAtmosphere,
   onOpenTrailer,
+  onOpenInterest,
+  onOpenWatchlist,
   onStepDossier,
 }: HeroSectionProps) {
-  const [interested, setInterested] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(VOTED_STORAGE_KEY) === 'true';
-    } catch {
-      return false;
-    }
-  });
-
-  const [interestCount, setInterestCount] = useState<number>(() => {
-    try {
-      const saved = Number(localStorage.getItem(COUNT_STORAGE_KEY));
-      return Number.isFinite(saved) && saved > 0 ? saved : 0;
-    } catch {
-      return 0;
-    }
-  });
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-    fetchInterestCount('get', controller.signal)
-      .then((count) => {
-        if (typeof count === 'number') {
-          setInterestCount(count);
-          try {
-            localStorage.setItem(COUNT_STORAGE_KEY, String(count));
-          } catch {
-            // Ignore storage errors
-          }
-        }
-      })
-      .catch(() => {
-        // Keep local fallback count when offline or timed out
-      })
-      .finally(() => {
-        window.clearTimeout(timeoutId);
-      });
-
-    return () => {
-      window.clearTimeout(timeoutId);
-      controller.abort();
-    };
-  }, []);
-
   const handleInterestedClick = () => {
     soundEngine.playUiCue(340);
     onSurgeAtmosphere();
-
-    if (interested) return;
-
-    setInterested(true);
-    const nextCount = interestCount + 1;
-    setInterestCount(nextCount);
-
-    try {
-      localStorage.setItem(VOTED_STORAGE_KEY, 'true');
-      localStorage.setItem(COUNT_STORAGE_KEY, String(nextCount));
-    } catch {
-      // Ignore storage errors
-    }
-
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-    fetchInterestCount('increment', controller.signal)
-      .then((count) => {
-        if (typeof count === 'number') {
-          setInterestCount(count);
-          try {
-            localStorage.setItem(COUNT_STORAGE_KEY, String(count));
-          } catch {
-            // Ignore storage errors
-          }
-        }
-      })
-      .catch(() => {
-        // Local optimistic count already applied
-      })
-      .finally(() => {
-        window.clearTimeout(timeoutId);
-      });
+    onOpenInterest();
   };
+
+  const interestedLabel = rsvp
+    ? `On the List · ${rsvp.watchDate === 'dec-17' ? 'Dec 17' : 'After 17'}`
+    : interested
+      ? 'Add Your Name'
+      : 'I am Interested';
+
+  const displayCount = Math.max(interestCount, rosterCount);
 
   return (
     <section
@@ -282,66 +179,111 @@ export function HeroSection({
         </div>
 
         {/* Theatrical CTAs */}
-        <div className="mt-[clamp(0.5rem,1.6dvh,1.5rem)] flex w-full flex-wrap items-center justify-center gap-[clamp(0.45rem,1.8vw,0.875rem)]">
+        <div className="mt-[clamp(0.5rem,1.6dvh,1.5rem)] flex w-full flex-col items-center justify-center gap-[clamp(0.45rem,1.4dvh,0.75rem)] md:flex-row md:flex-wrap md:gap-[clamp(0.5rem,1.8vw,0.875rem)]">
+          {/* Row 1 on mobile: Watch Trailer + Interested always stay on one line */}
+          <div className="flex w-full flex-nowrap items-center justify-center gap-[clamp(0.35rem,1.6vw,0.875rem)] md:w-auto">
+            <button
+              type="button"
+              onMouseEnter={onSurgeAtmosphere}
+              onClick={() => {
+                soundEngine.playUiCue(320);
+                onOpenTrailer();
+              }}
+              style={{
+                borderColor: `${activeCharacter.accentHex}80`,
+                backgroundColor: `${activeCharacter.accentHex}26`,
+                boxShadow: `0 0 24px ${activeCharacter.accentHex}33, inset 0 0 14px ${activeCharacter.accentHex}1f`,
+              }}
+              className="group inline-flex min-h-[clamp(2.25rem,8vw,2.625rem)] shrink-0 items-center justify-center gap-[clamp(0.3rem,1.2vw,0.5rem)] whitespace-nowrap rounded-full border px-[clamp(0.6rem,2.8vw,1.4rem)] py-[clamp(0.38rem,1dvh,0.625rem)] text-[clamp(0.54rem,2.4vw,0.75rem)] font-bold tracking-[clamp(0.06em,0.22vw,0.18em)] text-white uppercase transition-all duration-500 hover:brightness-125 md:backdrop-blur-md focus-visible:outline-2 focus-visible:outline-white/75"
+            >
+              <Play
+                className="h-[clamp(0.75rem,3vw,0.875rem)] w-[clamp(0.75rem,3vw,0.875rem)] shrink-0 transition-transform duration-300 group-hover:scale-110"
+                style={{
+                  color: activeCharacter.accentHex,
+                  fill: activeCharacter.accentHex,
+                }}
+              />
+              <span>Watch Trailer</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleInterestedClick}
+              aria-pressed={interested}
+              style={
+                interested
+                  ? {
+                      borderColor: `${activeCharacter.accentHex}b3`,
+                      backgroundColor: `${activeCharacter.accentHex}33`,
+                      boxShadow: `0 0 24px ${activeCharacter.accentHex}38, inset 0 0 14px ${activeCharacter.accentHex}22`,
+                    }
+                  : {
+                      borderColor: `${activeCharacter.accentHex}47`,
+                      backgroundColor: 'rgba(6, 8, 6, 0.78)',
+                    }
+              }
+              className={`inline-flex min-h-[clamp(2.25rem,8vw,2.625rem)] shrink-0 items-center justify-center gap-[clamp(0.3rem,1.2vw,0.5rem)] whitespace-nowrap rounded-full border px-[clamp(0.6rem,2.8vw,1.25rem)] py-[clamp(0.38rem,1dvh,0.625rem)] text-[clamp(0.54rem,2.4vw,0.75rem)] font-semibold tracking-[clamp(0.05em,0.2vw,0.16em)] uppercase transition-all duration-500 hover:brightness-125 md:backdrop-blur-md focus-visible:outline-2 focus-visible:outline-white/75 ${
+                interested ? 'text-white' : 'text-white/85 hover:text-white'
+              }`}
+            >
+              {rsvp ? (
+                <Check
+                  className="h-[clamp(0.75rem,3vw,0.875rem)] w-[clamp(0.75rem,3vw,0.875rem)] shrink-0"
+                  style={{ color: activeCharacter.accentHex }}
+                />
+              ) : interested ? (
+                <UserPlus
+                  className="h-[clamp(0.75rem,3vw,0.875rem)] w-[clamp(0.75rem,3vw,0.875rem)] shrink-0"
+                  style={{ color: activeCharacter.accentHex }}
+                />
+              ) : (
+                <Flame
+                  className="h-[clamp(0.75rem,3vw,0.875rem)] w-[clamp(0.75rem,3vw,0.875rem)] shrink-0"
+                  style={{ color: activeCharacter.accentHex }}
+                />
+              )}
+              <span>{interestedLabel}</span>
+              {displayCount > 0 && (
+                <span
+                  className="shrink-0 rounded-full px-[clamp(0.35rem,1.4vw,0.5rem)] py-0.5 text-[clamp(0.55rem,2.1vw,0.625rem)] font-bold tracking-normal tabular-nums transition-colors duration-500"
+                  style={{
+                    backgroundColor: `${activeCharacter.accentHex}33`,
+                    color: activeCharacter.accentHex,
+                  }}
+                >
+                  {displayCount}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Row 2 on mobile: Who's Going */}
           <button
             type="button"
-            onMouseEnter={onSurgeAtmosphere}
             onClick={() => {
-              soundEngine.playUiCue(320);
-              onOpenTrailer();
+              soundEngine.playUiCue(300);
+              onOpenWatchlist();
             }}
             style={{
-              borderColor: `${activeCharacter.accentHex}80`,
-              backgroundColor: `${activeCharacter.accentHex}26`,
-              boxShadow: `0 0 24px ${activeCharacter.accentHex}33, inset 0 0 14px ${activeCharacter.accentHex}1f`,
+              borderColor: `${activeCharacter.accentHex}38`,
+              backgroundColor: 'rgba(6, 8, 6, 0.72)',
             }}
-            className="group inline-flex min-h-[38px] items-center justify-center gap-2 rounded-full border px-[clamp(0.9rem,3.2vw,1.5rem)] py-[clamp(0.4rem,1dvh,0.625rem)] text-[clamp(0.625rem,1.4vw,0.75rem)] font-bold tracking-[0.18em] text-white uppercase transition-all duration-500 hover:brightness-125 sm:min-h-[42px] md:backdrop-blur-md focus-visible:outline-2 focus-visible:outline-white/75"
+            className="inline-flex min-h-[clamp(2.2rem,7.8vw,2.625rem)] shrink-0 items-center justify-center gap-[clamp(0.3rem,1.2vw,0.5rem)] whitespace-nowrap rounded-full border px-[clamp(0.75rem,3vw,1.15rem)] py-[clamp(0.38rem,1dvh,0.625rem)] text-[clamp(0.56rem,2.4vw,0.75rem)] font-semibold tracking-[clamp(0.06em,0.2vw,0.14em)] text-white/80 uppercase transition-all duration-500 hover:brightness-125 hover:text-white md:backdrop-blur-md focus-visible:outline-2 focus-visible:outline-white/75"
           >
-            <Play
-              className="h-3.5 w-3.5 transition-transform duration-300 group-hover:scale-110"
-              style={{
-                color: activeCharacter.accentHex,
-                fill: activeCharacter.accentHex,
-              }}
+            <Users
+              className="h-[clamp(0.75rem,3vw,0.875rem)] w-[clamp(0.75rem,3vw,0.875rem)] shrink-0"
+              style={{ color: activeCharacter.accentHex }}
             />
-            <span>Watch Trailer</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleInterestedClick}
-            aria-pressed={interested}
-            style={
-              interested
-                ? {
-                    borderColor: `${activeCharacter.accentHex}b3`,
-                    backgroundColor: `${activeCharacter.accentHex}33`,
-                    boxShadow: `0 0 24px ${activeCharacter.accentHex}38, inset 0 0 14px ${activeCharacter.accentHex}22`,
-                  }
-                : {
-                    borderColor: `${activeCharacter.accentHex}47`,
-                    backgroundColor: 'rgba(6, 8, 6, 0.78)',
-                  }
-            }
-            className={`inline-flex min-h-[38px] items-center justify-center gap-2 rounded-full border px-[clamp(0.85rem,3vw,1.25rem)] py-[clamp(0.4rem,1dvh,0.625rem)] text-[clamp(0.625rem,1.4vw,0.75rem)] font-semibold tracking-[0.16em] uppercase transition-all duration-500 hover:brightness-125 sm:min-h-[42px] md:backdrop-blur-md focus-visible:outline-2 focus-visible:outline-white/75 ${
-              interested ? 'text-white' : 'text-white/85 hover:text-white'
-            }`}
-          >
-            {interested ? (
-              <Check className="h-3.5 w-3.5" style={{ color: activeCharacter.accentHex }} />
-            ) : (
-              <Flame className="h-3.5 w-3.5" style={{ color: activeCharacter.accentHex }} />
-            )}
-            <span>{interested ? 'Interested' : 'I am Interested'}</span>
-            {interestCount > 0 && (
+            <span>Who&apos;s Going</span>
+            {rosterCount > 0 && (
               <span
-                className="rounded-full px-2 py-0.5 text-[10px] font-bold tracking-normal tabular-nums transition-colors duration-500"
+                className="shrink-0 rounded-full px-[clamp(0.35rem,1.4vw,0.5rem)] py-0.5 text-[clamp(0.55rem,2.1vw,0.625rem)] font-bold tracking-normal tabular-nums"
                 style={{
-                  backgroundColor: `${activeCharacter.accentHex}33`,
+                  backgroundColor: `${activeCharacter.accentHex}29`,
                   color: activeCharacter.accentHex,
                 }}
               >
-                {interestCount}
+                {rosterCount}
               </span>
             )}
           </button>

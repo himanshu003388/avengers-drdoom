@@ -12,9 +12,12 @@ import { CinematicPreloader } from './components/CinematicPreloader';
 import { DoomsdayWebGLScene } from './components/DoomsdayWebGLScene';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { HeroSection } from './components/HeroSection';
+import { InterestModal } from './components/InterestModal';
 import { Navbar } from './components/Navbar';
 import { TrailerModal } from './components/TrailerModal';
+import { WatchlistModal } from './components/WatchlistModal';
 import { CHARACTERS, type CharacterProfile } from './data/characters';
+import { useWatchlist } from './hooks/useWatchlist';
 import type { AtmosphereMode } from './utils/atmosphere';
 import { soundEngine } from './utils/sound';
 
@@ -24,6 +27,19 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [activeCharacterId, setActiveCharacterId] = useState<string>(CHARACTERS[0].id);
   const [trailerOpen, setTrailerOpen] = useState(false);
+  const [interestModalOpen, setInterestModalOpen] = useState(false);
+  const [watchlistOpen, setWatchlistOpen] = useState(false);
+
+  const anyModalOpen = trailerOpen || interestModalOpen || watchlistOpen;
+  const {
+    interested,
+    interestCount,
+    rsvp,
+    entries,
+    submitting,
+    markInterested,
+    submitRsvp,
+  } = useWatchlist();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const activeCharacterIdRef = useRef<string>(activeCharacterId);
@@ -194,7 +210,7 @@ export default function App() {
     };
 
     const handleWheel = (e: WheelEvent) => {
-      if (trailerOpen || e.ctrlKey || pendingSwitchDir !== null) return;
+      if (anyModalOpen || e.ctrlKey || pendingSwitchDir !== null) return;
       const dy = e.deltaMode === 1 ? e.deltaY * 32 : e.deltaY;
       const dx = e.deltaMode === 1 ? e.deltaX * 32 : e.deltaX;
       if (Math.abs(dy) < Math.abs(dx)) return;
@@ -229,7 +245,7 @@ export default function App() {
     };
 
     const handleTouchStart = (e: TouchEvent) => {
-      if (trailerOpen || pendingSwitchDir !== null || e.touches.length !== 1) {
+      if (anyModalOpen || pendingSwitchDir !== null || e.touches.length !== 1) {
         isTouchDragging = false;
         touchStartRef.current = null;
         if (pendingSwitchDir === null && isZoomDossier(activeCharacterIdRef.current)) {
@@ -246,7 +262,7 @@ export default function App() {
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      if (trailerOpen || pendingSwitchDir !== null || !touchStartRef.current || e.touches.length !== 1) return;
+      if (anyModalOpen || pendingSwitchDir !== null || !touchStartRef.current || e.touches.length !== 1) return;
       if (performance.now() - lastScrollSwitchRef.current < TOUCH_COOLDOWN_MS) return;
 
       const deltaX = touchStartRef.current.x - e.touches[0].clientX;
@@ -268,7 +284,7 @@ export default function App() {
 
     const handleTouchEnd = (e: TouchEvent) => {
       isTouchDragging = false;
-      if (trailerOpen || pendingSwitchDir !== null || !touchStartRef.current || e.changedTouches.length === 0) {
+      if (anyModalOpen || pendingSwitchDir !== null || !touchStartRef.current || e.changedTouches.length === 0) {
         touchStartRef.current = null;
         if (pendingSwitchDir === null && isZoomDossier(activeCharacterIdRef.current)) {
           setScrollProgress(0);
@@ -301,7 +317,7 @@ export default function App() {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (trailerOpen || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (anyModalOpen || e.metaKey || e.ctrlKey || e.altKey) return;
       const target = e.target;
       if (
         target instanceof HTMLElement &&
@@ -341,7 +357,7 @@ export default function App() {
       window.removeEventListener('touchend', handleTouchEnd);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [stepDossier, trailerOpen]);
+  }, [stepDossier, anyModalOpen]);
 
   useLayoutEffect(() => {
     const zoomEl = containerRef.current?.querySelector<HTMLElement>(
@@ -389,7 +405,7 @@ export default function App() {
           characters={CHARACTERS}
           activeCharacterId={activeCharacter.id}
           activeCharacterOverride={activeCharacter}
-          paused={trailerOpen}
+          paused={anyModalOpen}
         />
       </ErrorBoundary>
 
@@ -397,7 +413,7 @@ export default function App() {
         <DoomsdayWebGLScene
           accentHex={activeCharacter.accentHex}
           mode={atmosphereMode}
-          paused={trailerOpen}
+          paused={anyModalOpen}
         />
       </ErrorBoundary>
 
@@ -405,7 +421,7 @@ export default function App() {
         <AtmosphericCanvas
           mode={atmosphereMode}
           activeCharacter={activeCharacter}
-          paused={trailerOpen}
+          paused={anyModalOpen}
         />
       </ErrorBoundary>
 
@@ -426,13 +442,46 @@ export default function App() {
         <HeroSection
           activeCharacter={activeCharacter}
           characters={CHARACTERS}
+          interested={interested}
+          interestCount={interestCount}
+          rsvp={rsvp}
+          rosterCount={entries.length}
           onSurgeAtmosphere={triggerEmberSurge}
           onOpenTrailer={handleOpenTrailer}
+          onOpenInterest={() => {
+            markInterested();
+            setInterestModalOpen(true);
+          }}
+          onOpenWatchlist={() => setWatchlistOpen(true)}
           onStepDossier={(dir) => stepDossier(dir, 450)}
         />
       </main>
 
       <TrailerModal open={trailerOpen} onClose={() => setTrailerOpen(false)} />
+
+      <InterestModal
+        open={interestModalOpen}
+        accentHex={activeCharacter.accentHex}
+        existingRsvp={rsvp}
+        entries={entries}
+        submitting={submitting}
+        onClose={() => setInterestModalOpen(false)}
+        onSubmit={submitRsvp}
+        onOpenWatchlist={() => setWatchlistOpen(true)}
+      />
+
+      <WatchlistModal
+        open={watchlistOpen}
+        accentHex={activeCharacter.accentHex}
+        entries={entries}
+        totalCount={interestCount}
+        hasSubmittedRsvp={Boolean(rsvp)}
+        onClose={() => setWatchlistOpen(false)}
+        onOpenRsvp={() => {
+          markInterested();
+          setInterestModalOpen(true);
+        }}
+      />
 
       <footer className="pointer-events-none relative z-30 shrink-0 select-none px-[clamp(0.75rem,3vw,2rem)] pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-center md:pb-[max(0.875rem,env(safe-area-inset-bottom))] md:text-right">
         <p className="inline-flex items-center gap-1.5 text-[clamp(0.5625rem,1.2vw,0.625rem)] font-medium tracking-[0.2em] text-white/65 uppercase drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">

@@ -226,6 +226,28 @@
   }
 }
 
+@keyframes doomGeometryDrift {
+  0%,
+  100% {
+    transform: scale(1.01) rotate(-1.2deg);
+  }
+
+  50% {
+    transform: scale(1.05) rotate(1.2deg);
+  }
+}
+
+@keyframes doomMobileFloat {
+  0%,
+  100% {
+    transform: translate3d(0, -4px, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(0, 4px, 0) scale(1.018);
+  }
+}
+
 .animate-doom-glow {
   animation: slowEmberPulse 4.5s ease-in-out infinite;
 }
@@ -246,12 +268,22 @@
   animation: doomFumeDrift 11s ease-in-out infinite;
 }
 
+.animate-doom-geometry-drift {
+  animation: doomGeometryDrift 18s ease-in-out infinite;
+}
+
+.animate-doom-mobile-float {
+  animation: doomMobileFloat 7.5s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-doom-glow,
   .animate-doom-bg-breathe,
   .animate-doom-ring-expand,
   .animate-doom-rays-spin,
-  .animate-doom-fume-drift {
+  .animate-doom-fume-drift,
+  .animate-doom-geometry-drift,
+  .animate-doom-mobile-float {
     animation: none;
   }
 }

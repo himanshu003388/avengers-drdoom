@@ -10,6 +10,12 @@ interface BackgroundStageProps {
   paused?: boolean;
 }
 
+const GEOMETRY_FILTERS: Record<string, string> = {
+  'scarlet-nexus': 'sepia(1) saturate(3.2) hue-rotate(10deg) brightness(0.95)',
+  'captain-america': 'hue-rotate(-52deg) saturate(1.25) brightness(1.02)',
+  'mister-fantastic': 'hue-rotate(62deg) saturate(1.15) brightness(0.96)',
+};
+
 export function BackgroundStage({
   characters,
   activeCharacterId,
@@ -141,6 +147,7 @@ export function BackgroundStage({
       : characters;
   const isThor = activeCharacter.id === 'scarlet-nexus';
   const isMisterFantastic = activeCharacter.id === 'mister-fantastic';
+  const geometryFilter = GEOMETRY_FILTERS[activeCharacter.id];
 
   return (
     <div
@@ -189,17 +196,11 @@ export function BackgroundStage({
             height={768}
             decoding="async"
             fetchPriority="low"
-            style={
-              isLowSpecViewport
-                ? undefined
-                : isThor
-                  ? { filter: 'sepia(1) saturate(3.2) hue-rotate(10deg) brightness(0.95)' }
-                  : isMisterFantastic
-                    ? { filter: 'hue-rotate(62deg) saturate(1.15) brightness(0.96)' }
-                    : undefined
-            }
+            style={geometryFilter ? { filter: geometryFilter } : undefined}
             className={`pointer-events-none h-full w-full object-cover object-center ${
-              isLowSpecViewport ? 'opacity-55' : 'opacity-75 mix-blend-lighten'
+              isLowSpecViewport
+                ? 'animate-doom-geometry-drift opacity-55'
+                : 'opacity-75 mix-blend-lighten'
             }`}
           />
         </div>
@@ -235,18 +236,18 @@ export function BackgroundStage({
           }}
         />
 
-        {/* Rotating volumetric light rays behind subject (desktop fine-pointer only) */}
-        {!isLowSpecViewport && (
-          <div
-            className="animate-doom-rays-spin pointer-events-none absolute left-1/2 top-[var(--stage-center-y)] h-[clamp(22rem,92vmin,58rem)] w-[clamp(22rem,92vmin,58rem)] rounded-full opacity-40 mix-blend-screen will-change-transform"
-            style={{
-              background: `conic-gradient(from 0deg at 50% 50%, transparent 0deg, ${activeCharacter.accentHex}2a 18deg, transparent 42deg, transparent 88deg, ${activeCharacter.accentHex}22 112deg, transparent 142deg, transparent 196deg, ${activeCharacter.accentHex}28 224deg, transparent 258deg, transparent 304deg, ${activeCharacter.accentHex}1e 332deg, transparent 360deg)`,
-              maskImage: 'radial-gradient(circle, black 12%, rgba(0,0,0,0.6) 42%, transparent 70%)',
-              WebkitMaskImage:
-                'radial-gradient(circle, black 12%, rgba(0,0,0,0.6) 42%, transparent 70%)',
-            }}
-          />
-        )}
+        {/* Rotating volumetric light rays behind subject */}
+        <div
+          className={`animate-doom-rays-spin pointer-events-none absolute left-1/2 top-[var(--stage-center-y)] h-[clamp(22rem,92vmin,58rem)] w-[clamp(22rem,92vmin,58rem)] rounded-full will-change-transform ${
+            isLowSpecViewport ? 'opacity-25' : 'opacity-40 mix-blend-screen'
+          }`}
+          style={{
+            background: `conic-gradient(from 0deg at 50% 50%, transparent 0deg, ${activeCharacter.accentHex}2a 18deg, transparent 42deg, transparent 88deg, ${activeCharacter.accentHex}22 112deg, transparent 142deg, transparent 196deg, ${activeCharacter.accentHex}28 224deg, transparent 258deg, transparent 304deg, ${activeCharacter.accentHex}1e 332deg, transparent 360deg)`,
+            maskImage: 'radial-gradient(circle, black 12%, rgba(0,0,0,0.6) 42%, transparent 70%)',
+            WebkitMaskImage:
+              'radial-gradient(circle, black 12%, rgba(0,0,0,0.6) 42%, transparent 70%)',
+          }}
+        />
 
         {/* Expanding energy rings behind subject */}
         <div
@@ -304,7 +305,9 @@ export function BackgroundStage({
       {/* Layer 2: Detached 3D Subject Plane (all dossiers pre-mounted for instant crossfade) */}
       <div
         ref={subjectPlaneRef}
-        className={`absolute inset-0 ${isLowSpecViewport ? '' : 'will-change-transform'}`}
+        className={`absolute inset-0 ${
+          isLowSpecViewport ? 'animate-doom-mobile-float' : 'will-change-transform'
+        }`}
         style={
           isLowSpecViewport
             ? undefined
