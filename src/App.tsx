@@ -9,6 +9,7 @@ import { AtmosphericCanvas } from './components/AtmosphericCanvas';
 import { BackgroundStage } from './components/BackgroundStage';
 import { CinematicOverlay } from './components/CinematicOverlay';
 import { CinematicPreloader } from './components/CinematicPreloader';
+import { DoomsdayGameModal } from './components/DoomsdayGameModal';
 import { DoomsdayWebGLScene } from './components/DoomsdayWebGLScene';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { HeroSection } from './components/HeroSection';
@@ -17,20 +18,20 @@ import { Navbar } from './components/Navbar';
 import { TrailerModal } from './components/TrailerModal';
 import { WatchlistModal } from './components/WatchlistModal';
 import { CHARACTERS, type CharacterProfile } from './data/characters';
+import { useLeaderboard } from './hooks/useLeaderboard';
 import { useWatchlist } from './hooks/useWatchlist';
 import type { AtmosphereMode } from './utils/atmosphere';
-import { soundEngine } from './utils/sound';
 
 export default function App() {
   const [preloaderDone, setPreloaderDone] = useState(false);
   const [atmosphereMode, setAtmosphereMode] = useState<AtmosphereMode>('smoke-and-embers');
-  const [soundEnabled, setSoundEnabled] = useState(false);
   const [activeCharacterId, setActiveCharacterId] = useState<string>(CHARACTERS[0].id);
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [interestModalOpen, setInterestModalOpen] = useState(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
+  const [gameOpen, setGameOpen] = useState(false);
 
-  const anyModalOpen = trailerOpen || interestModalOpen || watchlistOpen;
+  const anyModalOpen = trailerOpen || interestModalOpen || watchlistOpen || gameOpen;
   const {
     interested,
     interestCount,
@@ -40,6 +41,15 @@ export default function App() {
     markInterested,
     submitRsvp,
   } = useWatchlist();
+  const {
+    playerName,
+    setPlayerName,
+    entries: leaderboardEntries,
+    loading: loadingLeaderboard,
+    submitting: submittingScore,
+    refresh: refreshLeaderboard,
+    submitScore,
+  } = useLeaderboard(rsvp?.name);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const activeCharacterIdRef = useRef<string>(activeCharacterId);
@@ -75,7 +85,6 @@ export default function App() {
         const nextIndex = (currentIndex + direction + CHARACTERS.length) % CHARACTERS.length;
         return CHARACTERS[nextIndex].id;
       });
-      soundEngine.playUiCue(direction > 0 ? 310 : 250);
       triggerEmberSurge();
     },
     [triggerEmberSurge]
@@ -85,7 +94,6 @@ export default function App() {
     (id: string) => {
       setActiveCharacterId((prevId) => {
         if (prevId === id) return prevId;
-        soundEngine.playUiCue(300);
         triggerEmberSurge();
         return id;
       });
@@ -373,25 +381,12 @@ export default function App() {
       if (surgeTimeoutRef.current) {
         window.clearTimeout(surgeTimeoutRef.current);
       }
-      soundEngine.stop();
     };
   }, []);
 
-  const handleToggleSound = () => {
-    const enabled = soundEngine.toggle();
-    setSoundEnabled(enabled);
-    if (enabled) {
-      triggerEmberSurge();
-    }
-  };
-
   const handleOpenTrailer = useCallback(() => {
-    if (soundEnabled) {
-      soundEngine.stop();
-      setSoundEnabled(false);
-    }
     setTrailerOpen(true);
-  }, [soundEnabled]);
+  }, []);
 
   return (
     <div
@@ -430,9 +425,8 @@ export default function App() {
       </ErrorBoundary>
 
       <Navbar
-        soundEnabled={soundEnabled}
-        onToggleSound={handleToggleSound}
         onResetHome={() => selectCharacter(CHARACTERS[0].id)}
+        onOpenGame={() => setGameOpen(true)}
       />
 
       <main
@@ -481,6 +475,19 @@ export default function App() {
           markInterested();
           setInterestModalOpen(true);
         }}
+      />
+
+      <DoomsdayGameModal
+        open={gameOpen}
+        accentHex={activeCharacter.accentHex}
+        playerName={playerName}
+        entries={leaderboardEntries}
+        loadingLeaderboard={loadingLeaderboard}
+        submittingScore={submittingScore}
+        onPlayerNameChange={setPlayerName}
+        onSubmitScore={submitScore}
+        onRefreshLeaderboard={refreshLeaderboard}
+        onClose={() => setGameOpen(false)}
       />
 
       <footer className="pointer-events-none relative z-30 shrink-0 select-none px-[clamp(0.75rem,3vw,2rem)] pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-center md:pb-[max(0.875rem,env(safe-area-inset-bottom))] md:text-right">

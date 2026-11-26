@@ -1,7 +1,6 @@
 import { Calendar, Flame, Lock, Users, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { PublicWatchlistEntry, WatchDateOption } from '../types/watchlist';
-import { soundEngine } from '../utils/sound';
 
 interface WatchlistModalProps {
   open: boolean;
@@ -44,7 +43,6 @@ export function WatchlistModal({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        soundEngine.playUiCue(220);
         onClose();
       }
     };
@@ -79,7 +77,6 @@ export function WatchlistModal({
       aria-labelledby="watchlist-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/88 p-3 sm:p-4"
       onClick={() => {
-        soundEngine.playUiCue(220);
         onClose();
       }}
     >
@@ -111,7 +108,6 @@ export function WatchlistModal({
           <button
             type="button"
             onClick={() => {
-              soundEngine.playUiCue(220);
               onClose();
             }}
             aria-label="Close watchlist modal"
@@ -131,7 +127,6 @@ export function WatchlistModal({
                   key={tab.id}
                   type="button"
                   onClick={() => {
-                    soundEngine.playUiCue(280);
                     setFilter(tab.id);
                   }}
                   style={
@@ -189,7 +184,6 @@ export function WatchlistModal({
               <button
                 type="button"
                 onClick={() => {
-                  soundEngine.playUiCue(320);
                   onClose();
                   onOpenRsvp();
                 }}
@@ -283,7 +277,6 @@ export function WatchlistModal({
           <button
             type="button"
             onClick={() => {
-              soundEngine.playUiCue(320);
               onClose();
               onOpenRsvp();
             }}

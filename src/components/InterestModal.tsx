@@ -6,7 +6,6 @@ import type {
   RsvpSubmission,
   WatchDateOption,
 } from '../types/watchlist';
-import { soundEngine } from '../utils/sound';
 
 interface InterestModalProps {
   open: boolean;
@@ -75,7 +74,6 @@ export function InterestModal({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        soundEngine.playUiCue(220);
         onClose();
       }
     };
@@ -107,7 +105,6 @@ export function InterestModal({
     }
 
     setError('');
-    soundEngine.playUiCue(340);
     await onSubmit({
       name: trimmedName,
       watchDate,
@@ -125,7 +122,6 @@ export function InterestModal({
       aria-labelledby="interest-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/88 p-4"
       onClick={() => {
-        soundEngine.playUiCue(220);
         onClose();
       }}
     >
@@ -157,7 +153,6 @@ export function InterestModal({
           <button
             type="button"
             onClick={() => {
-              soundEngine.playUiCue(220);
               onClose();
             }}
             aria-label="Close RSVP modal"
@@ -232,7 +227,6 @@ export function InterestModal({
               <button
                 type="button"
                 onClick={() => {
-                  soundEngine.playUiCue(260);
                   setEditing(true);
                 }}
                 className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold tracking-[0.14em] text-white/80 uppercase transition hover:border-white/35 hover:text-white"
@@ -244,7 +238,6 @@ export function InterestModal({
                 <button
                   type="button"
                   onClick={() => {
-                    soundEngine.playUiCue(300);
                     onClose();
                     onOpenWatchlist();
                   }}
@@ -304,7 +297,6 @@ export function InterestModal({
                       key={option.value}
                       type="button"
                       onClick={() => {
-                        soundEngine.playUiCue(280);
                         setWatchDate(option.value);
                       }}
                       style={
@@ -345,7 +337,6 @@ export function InterestModal({
                       key={option.value}
                       type="button"
                       onClick={() => {
-                        soundEngine.playUiCue(280);
                         setGroupSize(option.value);
                       }}
                       style={
@@ -422,7 +413,6 @@ export function InterestModal({
               <button
                 type="button"
                 onClick={() => {
-                  soundEngine.playUiCue(220);
                   if (existingRsvp) {
                     setEditing(false);
                   } else {

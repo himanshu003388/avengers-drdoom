@@ -1,6 +1,5 @@
 import { ExternalLink, Loader2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { soundEngine } from '../utils/sound';
 
 const TRAILER_VIDEO_ID = 'WwXD5OTlyHg';
 const TRAILER_EMBED_URL = `https://www.youtube.com/embed/${TRAILER_VIDEO_ID}?autoplay=1&rel=0&playsinline=1`;
@@ -22,7 +21,6 @@ export function TrailerModal({ open, onClose }: TrailerModalProps) {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        soundEngine.playUiCue(220);
         onClose();
       }
     };
@@ -46,7 +44,6 @@ export function TrailerModal({ open, onClose }: TrailerModalProps) {
       aria-labelledby="trailer-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/92 p-4"
       onClick={() => {
-        soundEngine.playUiCue(220);
         onClose();
       }}
     >
@@ -81,7 +78,6 @@ export function TrailerModal({ open, onClose }: TrailerModalProps) {
             <button
               type="button"
               onClick={() => {
-                soundEngine.playUiCue(220);
                 onClose();
               }}
               aria-label="Close trailer modal"

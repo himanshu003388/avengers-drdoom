@@ -1,7 +1,6 @@
 import { Check, ChevronDown, Flame, Play, UserPlus, Users } from 'lucide-react';
 import type { CharacterProfile } from '../data/characters';
 import type { RsvpSubmission } from '../types/watchlist';
-import { soundEngine } from '../utils/sound';
 import { CountdownTimer } from './CountdownTimer';
 
 interface HeroSectionProps {
@@ -32,7 +31,6 @@ export function HeroSection({
   onStepDossier,
 }: HeroSectionProps) {
   const handleInterestedClick = () => {
-    soundEngine.playUiCue(340);
     onSurgeAtmosphere();
     onOpenInterest();
   };
@@ -186,7 +184,6 @@ export function HeroSection({
               type="button"
               onMouseEnter={onSurgeAtmosphere}
               onClick={() => {
-                soundEngine.playUiCue(320);
                 onOpenTrailer();
               }}
               style={{
@@ -261,7 +258,6 @@ export function HeroSection({
           <button
             type="button"
             onClick={() => {
-              soundEngine.playUiCue(300);
               onOpenWatchlist();
             }}
             style={{
