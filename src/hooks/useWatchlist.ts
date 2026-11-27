@@ -553,7 +553,7 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
               ...localEntry,
               id: serverEntry.id,
               createdAt: serverEntry.createdAt,
-              synced: true,
+              synced: result.source === 'redis',
             });
           }
 

@@ -120,13 +120,13 @@ export function InterestModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="interest-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/88 p-4"
+      className="animate-modal-backdrop fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/88 p-4"
       onClick={() => {
         onClose();
       }}
     >
       <div
-        className="doom-hud-card relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border !bg-[#050c08] p-5 shadow-2xl sm:p-6"
+        className="animate-modal-panel doom-hud-card relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto scroll-smooth rounded-2xl border !bg-[#050c08] p-5 shadow-2xl sm:p-6"
         style={{
           borderColor: `${accentHex}55`,
           boxShadow: `0 0 54px ${accentHex}2a`,

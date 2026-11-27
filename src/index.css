@@ -412,6 +412,50 @@
   animation: playCalloutBob 2.6s ease-in-out infinite;
 }
 
+@keyframes modalBackdropIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalPanelIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0) scale(0.975);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes fluidItemIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.animate-modal-backdrop {
+  animation: modalBackdropIn 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-modal-panel {
+  animation: modalPanelIn 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fluid-item {
+  animation: fluidItemIn 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--fluid-delay, 0ms);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-doom-glow,
   .animate-doom-bg-breathe,
@@ -423,7 +467,10 @@
   .animate-play-btn-glow,
   .animate-play-btn-shimmer,
   .animate-play-icon-wiggle,
-  .animate-play-callout-bob {
+  .animate-play-callout-bob,
+  .animate-modal-backdrop,
+  .animate-modal-panel,
+  .animate-fluid-item {
     animation: none;
   }
 }

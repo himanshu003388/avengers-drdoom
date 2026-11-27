@@ -42,13 +42,13 @@ export function TrailerModal({ open, onClose }: TrailerModalProps) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="trailer-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/92 p-4"
+      className="animate-modal-backdrop fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/92 p-4"
       onClick={() => {
         onClose();
       }}
     >
       <div
-        className="doom-hud-card relative max-h-[calc(100dvh-2rem)] w-full max-w-5xl overflow-y-auto rounded-2xl border border-emerald-500/30 !bg-[#050c08] shadow-[0_0_60px_rgba(34,197,94,0.2)] md:!backdrop-blur-none"
+        className="animate-modal-panel doom-hud-card relative max-h-[calc(100dvh-2rem)] w-full max-w-5xl overflow-y-auto rounded-2xl border border-emerald-500/30 !bg-[#050c08] shadow-[0_0_60px_rgba(34,197,94,0.2)] md:!backdrop-blur-none"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-emerald-500/15 px-4 py-3 sm:px-6">

@@ -1,5 +1,5 @@
 import { Flame, Gamepad2, Medal, Play, RefreshCw, RotateCcw, ShieldAlert, Trophy, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import type { BubbleKind, LeaderboardEntry } from '../types/game';
 import { GameBubbleIcon } from './GameBubbleIcons';
 
@@ -174,19 +174,25 @@ function LeaderboardList({
                 ? '#fb923c'
                 : 'rgba(255,255,255,0.6)';
 
+        const rowStyle = {
+          '--fluid-delay': `${Math.min(idx, 15) * 24}ms`,
+          ...(isCurrent
+            ? {
+                borderColor: `${accentHex}70`,
+                backgroundColor: `${accentHex}18`,
+                boxShadow: `0 0 18px ${accentHex}1f`,
+              }
+            : {}),
+        } as CSSProperties;
+
         return (
           <li
             key={entry.id}
-            style={
+            style={rowStyle}
+            className={`animate-fluid-item flex items-center justify-between gap-3 rounded-xl border px-3 py-2 transition-all duration-300 ease-out hover:-translate-y-0.5 ${
               isCurrent
-                ? {
-                    borderColor: `${accentHex}70`,
-                    backgroundColor: `${accentHex}18`,
-                  }
-                : undefined
-            }
-            className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 ${
-              isCurrent ? '' : 'border-white/10 bg-white/[0.03]'
+                ? ''
+                : 'border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]'
             }`}
           >
             <div className="flex min-w-0 items-center gap-2.5">
@@ -552,11 +558,11 @@ export function DoomsdayGameModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="game-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/90 p-2.5 sm:p-4"
+      className="animate-modal-backdrop fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/90 p-2.5 sm:p-4"
       onClick={onClose}
     >
       <div
-        className={`doom-hud-card relative flex h-[min(86dvh,42rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border !bg-[#02050a] !backdrop-blur-none shadow-2xl ${
+        className={`animate-modal-panel doom-hud-card relative flex h-[min(86dvh,42rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border !bg-[#02050a] !backdrop-blur-none shadow-2xl ${
           bombFlash ? 'animate-game-bomb-shake' : ''
         }`}
         style={{
@@ -670,7 +676,7 @@ export function DoomsdayGameModal({
               </button>
             </form>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-5">
+            <div className="min-h-0 flex-1 overflow-y-auto scroll-smooth px-4 py-3 sm:px-5">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-[0.2em] text-white/65 uppercase">
                   <Trophy className="h-3.5 w-3.5" style={{ color: accentHex }} />
@@ -899,7 +905,7 @@ export function DoomsdayGameModal({
               </p>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-6">
+            <div className="min-h-0 flex-1 overflow-y-auto scroll-smooth px-4 py-3 sm:px-6">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="text-[10px] font-bold tracking-[0.2em] text-white/60 uppercase">
                   Campus Leaderboard · {entries.length}{' '}

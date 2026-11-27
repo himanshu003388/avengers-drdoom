@@ -191,7 +191,7 @@ export function HeroSection({
                 backgroundColor: `${activeCharacter.accentHex}26`,
                 boxShadow: `0 0 24px ${activeCharacter.accentHex}33, inset 0 0 14px ${activeCharacter.accentHex}1f`,
               }}
-              className="group inline-flex min-h-[clamp(2.25rem,8vw,2.625rem)] shrink-0 items-center justify-center gap-[clamp(0.3rem,1.2vw,0.5rem)] whitespace-nowrap rounded-full border px-[clamp(0.6rem,2.8vw,1.4rem)] py-[clamp(0.38rem,1dvh,0.625rem)] text-[clamp(0.54rem,2.4vw,0.75rem)] font-bold tracking-[clamp(0.06em,0.22vw,0.18em)] text-white uppercase transition-all duration-500 hover:brightness-125 md:backdrop-blur-md focus-visible:outline-2 focus-visible:outline-white/75"
+              className="group inline-flex min-h-[clamp(2.25rem,8vw,2.625rem)] shrink-0 items-center justify-center gap-[clamp(0.3rem,1.2vw,0.5rem)] whitespace-nowrap rounded-full border px-[clamp(0.6rem,2.8vw,1.4rem)] py-[clamp(0.38rem,1dvh,0.625rem)] text-[clamp(0.54rem,2.4vw,0.75rem)] font-bold tracking-[clamp(0.06em,0.22vw,0.18em)] text-white uppercase transition-all duration-300 ease-out hover:-translate-y-0.5 hover:brightness-125 active:scale-[0.98] md:backdrop-blur-md focus-visible:outline-2 focus-visible:outline-white/75"
             >
               <Play
                 className="h-[clamp(0.75rem,3vw,0.875rem)] w-[clamp(0.75rem,3vw,0.875rem)] shrink-0 transition-transform duration-300 group-hover:scale-110"
@@ -219,7 +219,7 @@ export function HeroSection({
                       backgroundColor: 'rgba(6, 8, 6, 0.78)',
                     }
               }
-              className={`inline-flex min-h-[clamp(2.25rem,8vw,2.625rem)] shrink-0 items-center justify-center gap-[clamp(0.3rem,1.2vw,0.5rem)] whitespace-nowrap rounded-full border px-[clamp(0.6rem,2.8vw,1.25rem)] py-[clamp(0.38rem,1dvh,0.625rem)] text-[clamp(0.54rem,2.4vw,0.75rem)] font-semibold tracking-[clamp(0.05em,0.2vw,0.16em)] uppercase transition-all duration-500 hover:brightness-125 md:backdrop-blur-md focus-visible:outline-2 focus-visible:outline-white/75 ${
+              className={`inline-flex min-h-[clamp(2.25rem,8vw,2.625rem)] shrink-0 items-center justify-center gap-[clamp(0.3rem,1.2vw,0.5rem)] whitespace-nowrap rounded-full border px-[clamp(0.6rem,2.8vw,1.25rem)] py-[clamp(0.38rem,1dvh,0.625rem)] text-[clamp(0.54rem,2.4vw,0.75rem)] font-semibold tracking-[clamp(0.05em,0.2vw,0.16em)] uppercase transition-all duration-300 ease-out hover:-translate-y-0.5 hover:brightness-125 active:scale-[0.98] md:backdrop-blur-md focus-visible:outline-2 focus-visible:outline-white/75 ${
                 interested ? 'text-white' : 'text-white/85 hover:text-white'
               }`}
             >
@@ -264,7 +264,7 @@ export function HeroSection({
               borderColor: `${activeCharacter.accentHex}38`,
               backgroundColor: 'rgba(6, 8, 6, 0.72)',
             }}
-            className="inline-flex min-h-[clamp(2.2rem,7.8vw,2.625rem)] shrink-0 items-center justify-center gap-[clamp(0.3rem,1.2vw,0.5rem)] whitespace-nowrap rounded-full border px-[clamp(0.75rem,3vw,1.15rem)] py-[clamp(0.38rem,1dvh,0.625rem)] text-[clamp(0.56rem,2.4vw,0.75rem)] font-semibold tracking-[clamp(0.06em,0.2vw,0.14em)] text-white/80 uppercase transition-all duration-500 hover:brightness-125 hover:text-white md:backdrop-blur-md focus-visible:outline-2 focus-visible:outline-white/75"
+            className="inline-flex min-h-[clamp(2.2rem,7.8vw,2.625rem)] shrink-0 items-center justify-center gap-[clamp(0.3rem,1.2vw,0.5rem)] whitespace-nowrap rounded-full border px-[clamp(0.75rem,3vw,1.15rem)] py-[clamp(0.38rem,1dvh,0.625rem)] text-[clamp(0.56rem,2.4vw,0.75rem)] font-semibold tracking-[clamp(0.06em,0.2vw,0.14em)] text-white/80 uppercase transition-all duration-300 ease-out hover:-translate-y-0.5 hover:brightness-125 hover:text-white active:scale-[0.98] md:backdrop-blur-md focus-visible:outline-2 focus-visible:outline-white/75"
           >
             <Users
               className="h-[clamp(0.75rem,3vw,0.875rem)] w-[clamp(0.75rem,3vw,0.875rem)] shrink-0"

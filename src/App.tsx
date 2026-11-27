@@ -487,6 +487,7 @@ export default function App() {
         entries={entries}
         totalCount={interestCount}
         hasSubmittedRsvp={Boolean(rsvp)}
+        currentRsvpName={rsvp?.name}
         refreshing={refreshingWatchlist}
         onRefresh={() => {
           void refreshWatchlist(true);

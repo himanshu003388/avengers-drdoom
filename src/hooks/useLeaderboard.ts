@@ -383,6 +383,7 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
             setEntries(merged);
             writeStoredValue(LEADERBOARD_STORAGE_KEY, JSON.stringify(merged));
           } else {
+            upsertPendingScore(candidate);
             setEntries((prev) => {
               const merged = mergeLeaderboard(serverEntries, prev);
               writeStoredValue(LEADERBOARD_STORAGE_KEY, JSON.stringify(merged));
