@@ -4,8 +4,13 @@ An interactive, full-stack **Avengers: Doomsday** campus watch-party web app bui
 
 Designed to turn movie hype into a real campus coordination tool—complete with character dossiers, a live RSVP watchlist, and a 30-second arcade mini-game with a persistent leaderboard.
 
-> **Live Demo:** `[Add your Vercel/Netlify URL here]`  
-> **Demo Video / Preview:** `[Add screenshot or GIF here]`
+> **Live Demo:** `[Add your Vercel/Netlify URL here]`
+
+## Preview
+
+| Desktop View | Mobile View |
+| :---: | :---: |
+| <img src="docs/screenshots/desktop-view.jpg" alt="Avengers: Doomsday Desktop View" width="600" /> | <img src="docs/screenshots/mobile-view.jpg" alt="Avengers: Doomsday Mobile View" width="220" /> |
 
 ---
 
@@ -79,8 +84,8 @@ flowchart LR
 
 ### 1. Clone & Install
 ```bash
-git clone https://github.com/<your-username>/<your-repo-name>.git
-cd <your-repo-name>
+git clone https://github.com/himanshu003388/avengers-drdoom.git
+cd avengers-drdoom
 npm install
 ```
 
