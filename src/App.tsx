@@ -19,10 +19,12 @@ import { TrailerModal } from './components/TrailerModal';
 import { WatchlistModal } from './components/WatchlistModal';
 import { CHARACTERS, type CharacterProfile } from './data/characters';
 import { useLeaderboard } from './hooks/useLeaderboard';
+import { useVisitTracker } from './hooks/useVisitTracker';
 import { useWatchlist } from './hooks/useWatchlist';
 import type { AtmosphereMode } from './utils/atmosphere';
 
 export default function App() {
+  useVisitTracker();
   const [preloaderDone, setPreloaderDone] = useState(false);
   const [atmosphereMode, setAtmosphereMode] = useState<AtmosphereMode>('smoke-and-embers');
   const [activeCharacterId, setActiveCharacterId] = useState<string>(CHARACTERS[0].id);
