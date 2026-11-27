@@ -520,7 +520,7 @@ export default function App() {
         <p className="inline-flex items-center gap-1.5 text-[clamp(0.5625rem,1.2vw,0.625rem)] font-medium tracking-[0.2em] text-white/70 uppercase drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
           <span>Made with</span>
           <Heart className="h-3 w-3 fill-white text-white" aria-hidden="true" />
-          <span>by Himanshu Sahani</span>
+          <span>by Himanshu</span>
         </p>
       </footer>
     </div>

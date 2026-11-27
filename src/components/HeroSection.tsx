@@ -133,14 +133,14 @@ export const HeroSection = memo(function HeroSection({
       <div className="mx-auto flex w-full max-w-5xl shrink-0 flex-col items-center">
         <p
           key={`label-${activeCharacter.id}`}
-          className={`text-[clamp(0.5625rem,1.5vw,0.75rem)] font-semibold tracking-[clamp(0.14em,0.35vw,0.26em)] uppercase ${textAnimClass}`}
+          className={`max-w-full truncate whitespace-nowrap text-[clamp(0.5625rem,1.5vw,0.75rem)] font-semibold tracking-[clamp(0.14em,0.35vw,0.26em)] uppercase ${textAnimClass}`}
           style={{ color: activeCharacter.accentHex }}
         >
           {leftLabel} <span aria-hidden="true" className="mx-1.5 opacity-45">·</span>{' '}
           {activeCharacter.name}
         </p>
 
-        <div className="mt-[clamp(0.2rem,0.7dvh,0.5rem)] flex max-w-full items-center justify-center px-2 sm:px-4 md:hidden">
+        <div className="mt-[clamp(0.55rem,1.5dvh,1rem)] flex max-w-full items-center justify-center px-2 sm:px-4 md:hidden">
           <img
             src="/assets/aistudio/avengers-doomsday-logo.webp"
             alt="Marvel Studios' Avengers: Doomsday Movie Logo"
@@ -153,7 +153,7 @@ export const HeroSection = memo(function HeroSection({
           />
         </div>
 
-        <div className="mt-[clamp(0.2rem,0.9dvh,0.625rem)] w-full max-w-xl px-2">
+        <div className="mt-[clamp(0.2rem,0.9dvh,0.625rem)] flex min-h-[2.65rem] w-full max-w-xl items-center justify-center px-2 md:min-h-0">
           <p
             key={`quote-${activeCharacter.id}`}
             className={`text-[clamp(0.6875rem,1.6vw,0.875rem)] font-medium tracking-[0.1em] text-white/80 italic ${textAnimClass}`}
@@ -162,7 +162,7 @@ export const HeroSection = memo(function HeroSection({
           </p>
         </div>
 
-        <div className="mt-[clamp(1rem,3.2dvh,3rem)] w-full">
+        <div className="mt-[clamp(0.75rem,2.4dvh,2.25rem)] w-full md:mt-[clamp(1rem,3.2dvh,3rem)]">
           <CountdownTimer />
         </div>
 
@@ -277,6 +277,11 @@ export const HeroSection = memo(function HeroSection({
           aria-label={`Next dossier (${activeIndex + 1} of ${characters.length}): scroll or click to switch`}
           className="mt-[clamp(0.25rem,1.1dvh,1rem)] inline-flex min-h-[32px] items-center gap-1.5 rounded-full px-3 py-1 text-[clamp(0.5625rem,1.3vw,0.625rem)] font-semibold tracking-[0.24em] text-white/70 uppercase transition hover:text-white/95 sm:min-h-[36px] focus-visible:outline-2 focus-visible:outline-white/75"
         >
+          <ChevronDown
+            aria-hidden="true"
+            className="motion-reduce:animate-none h-3.5 w-3.5 animate-bounce"
+            style={{ color: activeCharacter.accentHex }}
+          />
           <span>Scroll to switch dossier</span>
           <ChevronDown
             aria-hidden="true"
