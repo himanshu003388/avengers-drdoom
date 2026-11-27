@@ -395,7 +395,7 @@ export function InterestModal({
                 maxLength={60}
                 value={info}
                 onChange={(e) => setInfo(e.target.value)}
-                placeholder="e.g. CSE 3rd Year · Evening show preferred"
+                placeholder="e.g. Branch Year · Evening show preferred"
                 className="mt-1.5 w-full rounded-xl border border-white/15 bg-black/55 px-3.5 py-2.5 text-sm text-white placeholder:text-white/50 focus:border-white/55 focus:outline-none"
               />
             </div>
