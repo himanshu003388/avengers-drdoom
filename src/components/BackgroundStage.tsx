@@ -156,7 +156,17 @@ export const BackgroundStage = memo(function BackgroundStage({
   const deepPlaneRef = useRef<HTMLDivElement | null>(null);
   const subjectPlaneRef = useRef<HTMLDivElement | null>(null);
   const sheenPlaneRef = useRef<HTMLDivElement | null>(null);
-  const preloadedImgRef = useRef<HTMLImageElement | null>(null);
+  const preloadedIdsRef = useRef<Set<string>>(new Set());
+  const preloadedImgsRef = useRef<HTMLImageElement[]>([]);
+  const pausedRef = useRef<boolean>(paused);
+  const resumeParallaxRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+    if (!paused) {
+      resumeParallaxRef.current?.();
+    }
+  }, [paused]);
 
   const stageCharacters =
     activeCharacterOverride &&
@@ -195,24 +205,45 @@ export const BackgroundStage = memo(function BackgroundStage({
     return () => mq.removeEventListener('change', sync);
   }, []);
 
-  // Pre-decode only the next character in idle time so switches have zero decode hitch without holding 4 live layers
+  // Pre-decode adjacent & remaining characters once in idle time for zero-hitch forward & backward switching
   useEffect(() => {
+    const len = stageCharacters.length;
     const idx = stageCharacters.findIndex((c) => c.id === activeCharacter.id);
-    if (idx === -1 || stageCharacters.length < 2) return;
-    const nextChar = stageCharacters[(idx + 1) % stageCharacters.length];
-    if (!nextChar?.imageUrl) return;
+    if (idx === -1 || len < 2) return;
+
+    preloadedIdsRef.current.add(activeCharacter.id);
+
+    const candidateIndices = [
+      (idx + 1) % len,
+      (idx - 1 + len) % len,
+      ...Array.from({ length: len }, (_, i) => i),
+    ];
+    const toPreload: CharacterProfile[] = [];
+    const queued = new Set<string>();
+
+    for (const i of candidateIndices) {
+      const char = stageCharacters[i];
+      if (!char?.imageUrl || preloadedIdsRef.current.has(char.id) || queued.has(char.id)) continue;
+      queued.add(char.id);
+      toPreload.push(char);
+    }
+
+    if (toPreload.length === 0) return;
 
     let cancelled = false;
     const preload = () => {
       if (cancelled) return;
-      const img = new Image();
-      img.decoding = 'async';
-      if (nextChar.imageSrcSet) img.srcset = nextChar.imageSrcSet;
-      if (nextChar.imageSizes) img.sizes = nextChar.imageSizes;
-      img.src = nextChar.imageUrl;
-      preloadedImgRef.current = img;
-      if (typeof img.decode === 'function') {
-        img.decode().catch(() => { });
+      for (const char of toPreload) {
+        preloadedIdsRef.current.add(char.id);
+        const img = new Image();
+        img.decoding = 'async';
+        if (char.imageSrcSet) img.srcset = char.imageSrcSet;
+        if (char.imageSrcSet && char.imageSizes) img.sizes = char.imageSizes;
+        img.src = char.imageUrl;
+        preloadedImgsRef.current.push(img);
+        if (typeof img.decode === 'function') {
+          img.decode().catch(() => {});
+        }
       }
     };
 
@@ -252,7 +283,7 @@ export const BackgroundStage = memo(function BackgroundStage({
     let lastTime = performance.now();
 
     const tick = (now: number) => {
-      if (document.hidden) {
+      if (document.hidden || pausedRef.current) {
         rafId = 0;
         return;
       }
@@ -291,14 +322,19 @@ export const BackgroundStage = memo(function BackgroundStage({
     };
 
     const scheduleTick = () => {
-      if (!rafId && !document.hidden) {
+      if (!rafId && !document.hidden && !pausedRef.current) {
         lastTime = performance.now();
         rafId = window.requestAnimationFrame(tick);
       }
     };
+    resumeParallaxRef.current = () => {
+      if (Math.abs(targetX - currentX) >= 0.002 || Math.abs(targetY - currentY) >= 0.002) {
+        scheduleTick();
+      }
+    };
 
     const handlePointerMove = (e: PointerEvent) => {
-      if (e.pointerType === 'touch') return;
+      if (e.pointerType === 'touch' || pausedRef.current) return;
       const w = window.innerWidth || 1440;
       const h = window.innerHeight || 900;
       targetX = (e.clientX / w - 0.5) * 2;
@@ -315,6 +351,7 @@ export const BackgroundStage = memo(function BackgroundStage({
     const onVisibilityChange = () => {
       if (
         !document.hidden &&
+        !pausedRef.current &&
         (Math.abs(targetX - currentX) >= 0.002 || Math.abs(targetY - currentY) >= 0.002)
       ) {
         scheduleTick();
@@ -328,6 +365,7 @@ export const BackgroundStage = memo(function BackgroundStage({
     window.addEventListener('pageshow', onVisibilityChange);
 
     return () => {
+      resumeParallaxRef.current = null;
       window.cancelAnimationFrame(rafId);
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointercancel', handlePointerLeave);
@@ -568,7 +606,7 @@ export const BackgroundStage = memo(function BackgroundStage({
                     <img
                       src={character.imageUrl}
                       srcSet={character.imageSrcSet}
-                      sizes={character.imageSizes}
+                      sizes={character.imageSrcSet ? character.imageSizes : undefined}
                       alt=""
                       width={imgMeta.width}
                       height={imgMeta.height}

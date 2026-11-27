@@ -7,7 +7,17 @@ const ABACUS_NAMESPACE = 'avengers-doomsday-campus';
 const ABACUS_KEY = 'interested';
 const UPSTREAM_TIMEOUT_MS = 5000;
 const MAX_ROSTER_ITEMS = 500;
+const MAX_PRIVATE_CONTACTS = 1000;
 const MAX_RAW_READ_ITEMS = 1000;
+
+class ClientRequestError extends Error {
+  public readonly statusCode: number;
+
+  constructor(message: string, statusCode = 400) {
+    super(message);
+    this.statusCode = statusCode;
+  }
+}
 
 type WatchDateOption = 'dec-17' | 'after-17';
 type GroupSizeOption = 'solo' | 'plus-one' | 'squad';
@@ -106,6 +116,7 @@ async function readRawRoster(url: string, token: string): Promise<RawRosterItem[
       ) {
         const cleanName = sanitizeText(parsed.name, 40);
         if (!cleanName) continue;
+        const cleanInfo = sanitizeText(parsed.info, 60);
         items.push({
           raw,
           entry: {
@@ -116,7 +127,7 @@ async function readRawRoster(url: string, token: string): Promise<RawRosterItem[
               parsed.groupSize === 'plus-one' || parsed.groupSize === 'squad'
                 ? parsed.groupSize
                 : 'solo',
-            info: typeof parsed.info === 'string' && parsed.info ? parsed.info : undefined,
+            info: cleanInfo || undefined,
             createdAt:
               typeof parsed.createdAt === 'string' ? parsed.createdAt : new Date().toISOString(),
           },
@@ -214,10 +225,14 @@ async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknow
     if (typeof preParsedBody === 'string') {
       const trimmed = preParsedBody.trim();
       if (!trimmed) return {};
-      const parsed = JSON.parse(trimmed);
-      return typeof parsed === 'object' && parsed !== null
-        ? (parsed as Record<string, unknown>)
-        : {};
+      try {
+        const parsed = JSON.parse(trimmed);
+        return typeof parsed === 'object' && parsed !== null
+          ? (parsed as Record<string, unknown>)
+          : {};
+      } catch {
+        throw new ClientRequestError('Invalid JSON payload', 400);
+      }
     }
     if (typeof preParsedBody === 'object') {
       return preParsedBody as Record<string, unknown>;
@@ -231,7 +246,7 @@ async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknow
     const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     totalBytes += buf.length;
     if (totalBytes > 16 * 1024) {
-      throw new Error('Request body too large');
+      throw new ClientRequestError('Request body too large', 413);
     }
     chunks.push(buf);
   }
@@ -240,8 +255,12 @@ async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknow
   const raw = Buffer.concat(chunks).toString('utf8').trim();
   if (!raw) return {};
 
-  const parsed = JSON.parse(raw);
-  return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    throw new ClientRequestError('Invalid JSON payload', 400);
+  }
 }
 
 function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
@@ -363,7 +382,14 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
             'LPUSH',
             PRIVATE_CONTACTS_KEY,
             JSON.stringify({ ...entry, contact }),
-          ])
+          ]).then(() =>
+            redisCommand(redis.url, redis.token, [
+              'LTRIM',
+              PRIVATE_CONTACTS_KEY,
+              0,
+              MAX_PRIVATE_CONTACTS - 1,
+            ])
+          )
         );
       }
 
@@ -406,7 +432,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       source: 'abacus',
     } satisfies CounterResult);
   } catch (error) {
+    const statusCode = error instanceof ClientRequestError ? error.statusCode : 502;
     const message = error instanceof Error ? error.message : 'Failed to update interest counter';
-    sendJson(res, 502, { error: message });
+    sendJson(res, statusCode, { error: message });
   }
 }

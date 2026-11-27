@@ -5,11 +5,20 @@ import type {
   RsvpSubmission,
   WatchDateOption,
 } from '../types/watchlist';
+import {
+  normalizeNameKey,
+  readStorageJson,
+  readStorageString,
+  removeStorage,
+  sanitizeText,
+  writeStorage,
+} from '../utils/common';
 
 const API_INTERESTED_URL = '/api/interested';
 const ABACUS_GET_URL = 'https://abacus.jasoncameron.dev/get/avengers-doomsday-campus/interested';
 const ABACUS_HIT_URL = 'https://abacus.jasoncameron.dev/hit/avengers-doomsday-campus/interested';
 const VOTED_STORAGE_KEY = 'doomsday_campus_interested';
+const PENDING_VOTE_STORAGE_KEY = 'doomsday_campus_pending_vote';
 const COUNT_STORAGE_KEY = 'doomsday_campus_interested_count';
 const RSVP_STORAGE_KEY = 'doomsday_campus_rsvp';
 const ROSTER_STORAGE_KEY = 'doomsday_campus_roster';
@@ -31,10 +40,6 @@ interface UseWatchlistOptions {
   activeModalOpen?: boolean;
 }
 
-function normalizeNameKey(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, ' ').trim();
-}
-
 function parseSingleEntry(item: unknown): PublicWatchlistEntry | null {
   if (typeof item !== 'object' || item === null) return null;
   const candidate = item as Partial<PublicWatchlistEntry>;
@@ -46,9 +51,10 @@ function parseSingleEntry(item: unknown): PublicWatchlistEntry | null {
     return null;
   }
 
-  const trimmedName = candidate.name.replace(/\s+/g, ' ').trim();
+  const trimmedName = sanitizeText(candidate.name, 40);
   if (!trimmedName) return null;
 
+  const trimmedInfo = sanitizeText(candidate.info, 60);
   return {
     id: candidate.id,
     name: trimmedName,
@@ -57,9 +63,21 @@ function parseSingleEntry(item: unknown): PublicWatchlistEntry | null {
       candidate.groupSize === 'plus-one' || candidate.groupSize === 'squad'
         ? candidate.groupSize
         : 'solo',
-    info: typeof candidate.info === 'string' && candidate.info ? candidate.info : undefined,
+    info: trimmedInfo || undefined,
     createdAt:
       typeof candidate.createdAt === 'string' ? candidate.createdAt : new Date().toISOString(),
+  };
+}
+
+function parseStoredRsvp(raw: unknown): RsvpSubmission | null {
+  const base = parseSingleEntry(raw);
+  if (!base) return null;
+  const candidate = raw as Partial<RsvpSubmission>;
+  const contact = sanitizeText(candidate.contact, 80);
+  return {
+    ...base,
+    ...(contact ? { contact } : {}),
+    synced: candidate.synced === true,
   };
 }
 
@@ -76,17 +94,22 @@ function parseEntries(raw: unknown): PublicWatchlistEntry[] {
 }
 
 function deduplicateRoster(entries: PublicWatchlistEntry[]): PublicWatchlistEntry[] {
-  const sorted = [...entries].sort((a, b) => {
-    const tA = new Date(a.createdAt).getTime();
-    const tB = new Date(b.createdAt).getTime();
-    return (Number.isFinite(tB) ? tB : 0) - (Number.isFinite(tA) ? tA : 0);
+  if (entries.length <= 1) {
+    return entries.filter((e) => normalizeNameKey(e.name).length > 0);
+  }
+
+  // Precompute timestamps once (O(N)) rather than parsing inside comparator (O(N log N))
+  const withTime = entries.map((entry) => {
+    const ts = Date.parse(entry.createdAt);
+    return { entry, ts: Number.isFinite(ts) ? ts : 0 };
   });
+  withTime.sort((a, b) => b.ts - a.ts);
 
   const seenIds = new Set<string>();
   const seenNames = new Set<string>();
   const unique: PublicWatchlistEntry[] = [];
 
-  for (const entry of sorted) {
+  for (const { entry } of withTime) {
     const nameKey = normalizeNameKey(entry.name);
     if (!nameKey || seenIds.has(entry.id) || seenNames.has(nameKey)) {
       continue;
@@ -108,14 +131,6 @@ function toPublicEntry(rsvp: RsvpSubmission): PublicWatchlistEntry {
     ...(rsvp.info ? { info: rsvp.info } : {}),
     createdAt: rsvp.createdAt,
   };
-}
-
-function writeStorage(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // Ignore storage errors
-  }
 }
 
 async function fetchWatchlistState(
@@ -186,46 +201,30 @@ async function incrementServerCount(signal: AbortSignal): Promise<number | null>
 export function useWatchlist(options: UseWatchlistOptions = {}) {
   const { activeModalOpen = false } = options;
 
-  const [interested, setInterested] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(VOTED_STORAGE_KEY) === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [interested, setInterested] = useState<boolean>(
+    () => readStorageString(VOTED_STORAGE_KEY) === 'true'
+  );
 
   const [interestCount, setInterestCount] = useState<number>(() => {
-    try {
-      const saved = Number(localStorage.getItem(COUNT_STORAGE_KEY));
-      return Number.isFinite(saved) && saved > 0 ? saved : 0;
-    } catch {
-      return 0;
-    }
+    const saved = Number(readStorageString(COUNT_STORAGE_KEY));
+    return Number.isFinite(saved) && saved > 0 ? saved : 0;
   });
 
-  const [rsvp, setRsvp] = useState<RsvpSubmission | null>(() => {
-    try {
-      const raw = localStorage.getItem(RSVP_STORAGE_KEY);
-      if (!raw) return null;
-      return JSON.parse(raw) as RsvpSubmission;
-    } catch {
-      return null;
-    }
-  });
+  const [rsvp, setRsvp] = useState<RsvpSubmission | null>(() =>
+    parseStoredRsvp(readStorageJson<unknown>(RSVP_STORAGE_KEY))
+  );
 
-  const [entries, setEntries] = useState<PublicWatchlistEntry[]>(() => {
-    try {
-      const raw = localStorage.getItem(ROSTER_STORAGE_KEY);
-      if (!raw) return [];
-      return deduplicateRoster(parseEntries(JSON.parse(raw)));
-    } catch {
-      return [];
-    }
-  });
+  const [entries, setEntries] = useState<PublicWatchlistEntry[]>(() =>
+    deduplicateRoster(parseEntries(readStorageJson<unknown>(ROSTER_STORAGE_KEY)))
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  const interestedRef = useRef(interested);
+  interestedRef.current = interested;
+  const interestCountRef = useRef(interestCount);
+  interestCountRef.current = interestCount;
   const rsvpRef = useRef<RsvpSubmission | null>(rsvp);
   rsvpRef.current = rsvp;
   const submittingRef = useRef(submitting);
@@ -233,10 +232,41 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
   const refreshInFlightRef = useRef(false);
   const unsyncedSyncInFlightRef = useRef(false);
   const lastFetchAtRef = useRef(0);
+  const unmountedRef = useRef(false);
+  const activeControllersRef = useRef<Set<AbortController>>(new Set());
+
+  const createTrackedRequest = useCallback((): {
+    controller: AbortController;
+    cleanup: () => void;
+  } => {
+    const controller = new AbortController();
+    activeControllersRef.current.add(controller);
+    const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    return {
+      controller,
+      cleanup: () => {
+        window.clearTimeout(timeoutId);
+        activeControllersRef.current.delete(controller);
+      },
+    };
+  }, []);
+
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      for (const controller of activeControllersRef.current) {
+        controller.abort();
+      }
+      activeControllersRef.current.clear();
+    };
+  }, []);
 
   const updateRsvpState = useCallback((nextRsvp: RsvpSubmission | null) => {
     rsvpRef.current = nextRsvp;
-    setRsvp(nextRsvp);
+    if (!unmountedRef.current) {
+      setRsvp(nextRsvp);
+    }
     if (nextRsvp) {
       writeStorage(RSVP_STORAGE_KEY, JSON.stringify(nextRsvp));
     }
@@ -244,11 +274,12 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
 
   const syncUnsyncedRsvp = useCallback(
     async (pendingRsvp: RsvpSubmission) => {
-      if (unsyncedSyncInFlightRef.current || submittingRef.current) return;
+      if (unsyncedSyncInFlightRef.current || submittingRef.current || unmountedRef.current) return;
       unsyncedSyncInFlightRef.current = true;
 
-      const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      const hasPendingVote = readStorageString(PENDING_VOTE_STORAGE_KEY) === '1';
+      const { controller, cleanup } = createTrackedRequest();
+
       try {
         const res = await fetch(API_INTERESTED_URL, {
           method: 'POST',
@@ -260,22 +291,26 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
             groupSize: pendingRsvp.groupSize,
             info: pendingRsvp.info ?? '',
             contact: pendingRsvp.contact ?? '',
-            incrementCount: false,
+            incrementCount: hasPendingVote,
           }),
           cache: 'no-store',
           signal: controller.signal,
         });
 
         const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json')) {
+        if (res.ok && contentType.includes('application/json') && !unmountedRef.current) {
           const result = (await res.json()) as ApiResponse;
+          if (hasPendingVote) {
+            removeStorage(PENDING_VOTE_STORAGE_KEY);
+          }
+
           const serverEntry = parseSingleEntry(result.entry);
           if (serverEntry) {
             updateRsvpState({
               ...pendingRsvp,
               id: serverEntry.id,
               createdAt: serverEntry.createdAt,
-              synced: true,
+              synced: result.source === 'redis',
             });
           }
           if (result.source === 'redis') {
@@ -284,6 +319,7 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
             writeStorage(ROSTER_STORAGE_KEY, JSON.stringify(next));
           }
           if (typeof result.count === 'number' && Number.isFinite(result.count)) {
+            interestCountRef.current = result.count;
             setInterestCount(result.count);
             writeStorage(COUNT_STORAGE_KEY, String(result.count));
           }
@@ -291,16 +327,16 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
       } catch {
         // Retry on next refresh if offline
       } finally {
-        window.clearTimeout(timeoutId);
+        cleanup();
         unsyncedSyncInFlightRef.current = false;
       }
     },
-    [updateRsvpState]
+    [createTrackedRequest, updateRsvpState]
   );
 
   const refresh = useCallback(
     async (force = false) => {
-      if (submittingRef.current || refreshInFlightRef.current) return;
+      if (submittingRef.current || refreshInFlightRef.current || unmountedRef.current) return;
       if (!force && Date.now() - lastFetchAtRef.current < MIN_AUTO_REFRESH_INTERVAL_MS) {
         return;
       }
@@ -308,16 +344,30 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
       refreshInFlightRef.current = true;
       setRefreshing(true);
 
-      const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      const { controller, cleanup } = createTrackedRequest();
 
       try {
+        // Flush any queued standalone vote before reading latest count
+        if (readStorageString(PENDING_VOTE_STORAGE_KEY) === '1' && !rsvpRef.current) {
+          try {
+            const syncedCount = await incrementServerCount(controller.signal);
+            if (typeof syncedCount === 'number') {
+              removeStorage(PENDING_VOTE_STORAGE_KEY);
+            }
+          } catch {
+            // Will retry on next refresh
+          }
+        }
+
         const { count, entries: serverEntries, source } = await fetchWatchlistState(
           controller.signal
         );
+        if (unmountedRef.current) return;
+
         lastFetchAtRef.current = Date.now();
 
         if (typeof count === 'number') {
+          interestCountRef.current = count;
           setInterestCount(count);
           writeStorage(COUNT_STORAGE_KEY, String(count));
         }
@@ -333,6 +383,7 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
             );
 
             if (matched) {
+              removeStorage(PENDING_VOTE_STORAGE_KEY);
               if (currentRsvp.id !== matched.id || currentRsvp.synced !== true) {
                 updateRsvpState({
                   ...currentRsvp,
@@ -359,12 +410,14 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
       } catch {
         // Keep local fallback state when offline or timed out
       } finally {
-        window.clearTimeout(timeoutId);
+        cleanup();
         refreshInFlightRef.current = false;
-        setRefreshing(false);
+        if (!unmountedRef.current) {
+          setRefreshing(false);
+        }
       }
     },
-    [syncUnsyncedRsvp, updateRsvpState]
+    [createTrackedRequest, syncUnsyncedRsvp, updateRsvpState]
   );
 
   // Initial load + focus/visibility/online + cross-tab storage sync
@@ -391,18 +444,23 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
       } else if (e.key === COUNT_STORAGE_KEY && e.newValue) {
         const nextCount = Number(e.newValue);
         if (Number.isFinite(nextCount) && nextCount >= 0) {
+          interestCountRef.current = nextCount;
           setInterestCount(nextCount);
         }
       } else if (e.key === RSVP_STORAGE_KEY && e.newValue) {
         try {
-          const parsed = JSON.parse(e.newValue) as RsvpSubmission;
-          rsvpRef.current = parsed;
-          setRsvp(parsed);
+          const parsed = parseStoredRsvp(JSON.parse(e.newValue));
+          if (parsed) {
+            rsvpRef.current = parsed;
+            setRsvp(parsed);
+          }
         } catch {
           // Ignore malformed storage payload
         }
       } else if (e.key === VOTED_STORAGE_KEY) {
-        setInterested(e.newValue === 'true');
+        const nextVoted = e.newValue === 'true';
+        interestedRef.current = nextVoted;
+        setInterested(nextVoted);
       }
     };
 
@@ -438,33 +496,38 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
   }, [activeModalOpen, refresh]);
 
   const markInterested = useCallback(() => {
-    if (interested) return;
+    if (interestedRef.current) return;
+
+    interestedRef.current = true;
+    const nextCount = interestCountRef.current + 1;
+    interestCountRef.current = nextCount;
 
     setInterested(true);
-    setInterestCount((prev) => {
-      const next = prev + 1;
-      writeStorage(VOTED_STORAGE_KEY, 'true');
-      writeStorage(COUNT_STORAGE_KEY, String(next));
-      return next;
-    });
+    setInterestCount(nextCount);
+    writeStorage(VOTED_STORAGE_KEY, 'true');
+    writeStorage(COUNT_STORAGE_KEY, String(nextCount));
+    writeStorage(PENDING_VOTE_STORAGE_KEY, '1');
 
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    const { controller, cleanup } = createTrackedRequest();
 
     incrementServerCount(controller.signal)
       .then((count) => {
         if (typeof count === 'number') {
-          setInterestCount(count);
-          writeStorage(COUNT_STORAGE_KEY, String(count));
+          removeStorage(PENDING_VOTE_STORAGE_KEY);
+          if (!unmountedRef.current) {
+            interestCountRef.current = count;
+            setInterestCount(count);
+            writeStorage(COUNT_STORAGE_KEY, String(count));
+          }
         }
       })
       .catch(() => {
-        // Optimistic count already applied
+        // Pending vote flag remains in storage for automatic retry
       })
       .finally(() => {
-        window.clearTimeout(timeoutId);
+        cleanup();
       });
-  }, [interested]);
+  }, [createTrackedRequest]);
 
   const submitRsvp = useCallback(
     async (data: {
@@ -476,21 +539,27 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
     }) => {
       setSubmitting(true);
       submittingRef.current = true;
-      const shouldIncrement = !interested;
+
+      const hasPendingVote = readStorageString(PENDING_VOTE_STORAGE_KEY) === '1';
+      const shouldIncrement = !interestedRef.current || hasPendingVote;
       const prevRsvp = rsvpRef.current;
-      const cleanName = data.name.replace(/\s+/g, ' ').trim();
+      const cleanName = sanitizeText(data.name, 40);
+      const cleanInfo = sanitizeText(data.info, 60);
+      const cleanContact = sanitizeText(data.contact, 80);
 
       const localEntry: RsvpSubmission = {
         id: prevRsvp?.id ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
         name: cleanName,
         watchDate: data.watchDate,
         groupSize: data.groupSize,
-        ...(data.info ? { info: data.info } : {}),
-        ...(data.contact ? { contact: data.contact } : {}),
+        ...(cleanInfo ? { info: cleanInfo } : {}),
+        ...(cleanContact ? { contact: cleanContact } : {}),
         createdAt: new Date().toISOString(),
         synced: false,
       };
 
+      const wasInterested = interestedRef.current;
+      interestedRef.current = true;
       setInterested(true);
       writeStorage(VOTED_STORAGE_KEY, 'true');
       updateRsvpState(localEntry);
@@ -512,16 +581,14 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
         return next;
       });
 
-      if (shouldIncrement) {
-        setInterestCount((prev) => {
-          const next = prev + 1;
-          writeStorage(COUNT_STORAGE_KEY, String(next));
-          return next;
-        });
+      if (!wasInterested) {
+        const nextCount = interestCountRef.current + 1;
+        interestCountRef.current = nextCount;
+        setInterestCount(nextCount);
+        writeStorage(COUNT_STORAGE_KEY, String(nextCount));
       }
 
-      const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      const { controller, cleanup } = createTrackedRequest();
 
       try {
         const res = await fetch(API_INTERESTED_URL, {
@@ -529,7 +596,10 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             id: localEntry.id,
-            ...data,
+            watchDate: data.watchDate,
+            groupSize: data.groupSize,
+            info: cleanInfo,
+            contact: cleanContact,
             name: cleanName,
             incrementCount: shouldIncrement,
           }),
@@ -538,11 +608,13 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
         });
 
         const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json')) {
+        if (res.ok && contentType.includes('application/json') && !unmountedRef.current) {
           const result = (await res.json()) as ApiResponse;
           lastFetchAtRef.current = Date.now();
+          removeStorage(PENDING_VOTE_STORAGE_KEY);
 
           if (typeof result.count === 'number' && Number.isFinite(result.count)) {
+            interestCountRef.current = result.count;
             setInterestCount(result.count);
             writeStorage(COUNT_STORAGE_KEY, String(result.count));
           }
@@ -572,12 +644,14 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
       } catch {
         // Local optimistic entry already saved with synced: false for retry
       } finally {
-        window.clearTimeout(timeoutId);
+        cleanup();
         submittingRef.current = false;
-        setSubmitting(false);
+        if (!unmountedRef.current) {
+          setSubmitting(false);
+        }
       }
     },
-    [interested, updateRsvpState]
+    [createTrackedRequest, updateRsvpState]
   );
 
   return {

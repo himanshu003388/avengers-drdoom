@@ -99,7 +99,6 @@ export const CHARACTERS: CharacterProfile[] = [
       'Crossing the dimensional barrier after witnessing his own universe unravel, Reed Richards races against the final incursion to decipher Doom’s Battleworld blueprint.',
     threatLevel: 'STRATEGIC GENIUS',
     imageUrl: '/assets/aistudio/mister-fantastic-1024.webp',
-    imageSizes: '(max-width: 1023px) 164vw, 112vw',
     imageScaleClass: 'scale-[1.93] translate-y-[27%]',
     accentHex: '#38BDF8',
     emberTint: 'cyan-emerald',

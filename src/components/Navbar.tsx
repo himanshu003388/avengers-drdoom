@@ -12,15 +12,15 @@ export const Navbar = memo(function Navbar({ onResetHome, onOpenGame }: NavbarPr
       <div className="relative mx-auto flex max-w-6xl items-center justify-between px-[clamp(0.75rem,3vw,1.5rem)] pb-[clamp(0.4rem,1dvh,0.75rem)] pt-[max(clamp(0.4rem,1dvh,0.75rem),env(safe-area-inset-top))]">
         <a
           href="#overview"
+          aria-label="UPTTI Kanpur × Marvel — Return to Doctor Doom dossier"
           onClick={(e) => {
             e.preventDefault();
             onResetHome?.();
           }}
-          className="flex min-h-[38px] items-center gap-[clamp(0.375rem,1.2vw,0.625rem)] focus-visible:outline-2 focus-visible:outline-emerald-400"
+          className="flex min-h-[38px] items-center gap-[clamp(0.375rem,1.2vw,0.625rem)] rounded-lg focus-visible:outline-2 focus-visible:outline-emerald-400"
         >
-          <span className="inline-flex flex-col gap-[2px] select-none">
+          <span className="inline-flex flex-col gap-[2px] select-none" aria-hidden="true">
             <span
-              aria-label="UPTTI"
               className="flex w-full justify-between px-[1px] font-sans text-[clamp(0.5rem,1.3vw,0.625rem)] font-extrabold leading-none text-[#52b77a] uppercase drop-shadow-[0_0_8px_rgba(22,101,52,0.75)]"
             >
               <span>U</span>
@@ -42,6 +42,8 @@ export const Navbar = memo(function Navbar({ onResetHome, onOpenGame }: NavbarPr
           <img
             src="/assets/svg/marvel-logo.svg"
             alt="Marvel Logo"
+            width={100}
+            height={40}
             className="h-[clamp(1.5rem,4vw,2rem)] w-auto"
           />
         </a>
@@ -56,7 +58,7 @@ export const Navbar = memo(function Navbar({ onResetHome, onOpenGame }: NavbarPr
             className="animate-play-btn-shimmer pointer-events-none absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-transparent via-emerald-300/25 to-transparent"
           />
           <span className="relative flex h-2 w-2 shrink-0" aria-hidden="true">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            <span className="motion-reduce:animate-none absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
           </span>
           <Gamepad2 className="animate-play-icon-wiggle relative h-3.5 w-3.5 shrink-0 text-emerald-300 drop-shadow-[0_0_6px_rgba(74,222,128,0.8)]" />
@@ -68,7 +70,7 @@ export const Navbar = memo(function Navbar({ onResetHome, onOpenGame }: NavbarPr
           type="button"
           onClick={onOpenGame}
           aria-label="Play Game and Top the Leaderboard"
-          className="animate-play-callout-bob absolute right-[clamp(0.75rem,3vw,1.5rem)] top-full z-30 mt-2 inline-flex items-center gap-1.5 rounded-2xl border border-emerald-400/40 bg-[#05120a]/75 px-3 py-1.5 text-left shadow-[0_10px_26px_rgba(0,0,0,0.6),0_0_20px_rgba(34,197,94,0.24)] backdrop-blur-md transition hover:border-emerald-300/70 hover:bg-[#071b0f]/85 md:hidden"
+          className="animate-play-callout-bob absolute right-[clamp(0.75rem,3vw,1.5rem)] top-full z-30 mt-2 inline-flex items-center gap-1.5 rounded-2xl border border-emerald-400/40 bg-[#05120a]/80 px-3 py-1.5 text-left shadow-[0_10px_26px_rgba(0,0,0,0.6),0_0_20px_rgba(34,197,94,0.24)] backdrop-blur-md transition hover:border-emerald-300/70 hover:bg-[#071b0f]/85 focus-visible:outline-2 focus-visible:outline-emerald-400 md:hidden [@media(max-height:540px)]:hidden"
         >
           <span className="text-[11px] font-bold leading-snug tracking-[0.02em] text-emerald-50">
             Play Game &amp;

@@ -13,13 +13,18 @@ export const CinematicOverlay = memo(function CinematicOverlay() {
   const [enableFluidCursor, setEnableFluidCursor] = useState(false);
 
   useEffect(() => {
-    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const isFinePointer = window.matchMedia('(pointer: fine) and (hover: hover)').matches;
-    if (prefersReduced || !isFinePointer) {
-      setEnableFluidCursor(false);
-      return;
-    }
-    setEnableFluidCursor(true);
+    const reducedMq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const pointerMq = window.matchMedia('(pointer: fine) and (hover: hover)');
+    const sync = () => {
+      setEnableFluidCursor(!reducedMq.matches && pointerMq.matches);
+    };
+    sync();
+    reducedMq.addEventListener('change', sync);
+    pointerMq.addEventListener('change', sync);
+    return () => {
+      reducedMq.removeEventListener('change', sync);
+      pointerMq.removeEventListener('change', sync);
+    };
   }, []);
 
   useEffect(() => {

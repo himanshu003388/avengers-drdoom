@@ -73,13 +73,19 @@ export const ThorLightning = memo(function ThorLightning({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const targetMixRef = useRef(phase === 'yellow' ? 1 : 0);
   const pausedRef = useRef(paused);
+  const resumeLoopRef = useRef<(() => void) | null>(null);
+  const renderStaticRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     targetMixRef.current = phase === 'yellow' ? 1 : 0;
+    renderStaticRef.current?.();
   }, [phase]);
 
   useEffect(() => {
     pausedRef.current = paused;
+    if (!paused) {
+      resumeLoopRef.current?.();
+    }
   }, [paused]);
 
   useEffect(() => {
@@ -117,14 +123,19 @@ export const ThorLightning = memo(function ThorLightning({
     const sparks: ElectricSpark[] = [];
     let colorMix = targetMixRef.current;
     let flashAlpha = 0;
-    let lastTime = performance.now();
-    let lastDraw = lastTime;
+    let lastDraw = performance.now();
     let spawnAccumulator = 0;
+
+    const getCenterRatio = () => {
+      if (height <= 540 && width > height) return 0.46;
+      if (width < 768) return 0.36;
+      if (width < 1024) return 0.46;
+      return 0.52;
+    };
 
     const spawnBoltAroundThor = (major = false) => {
       const cx = width * 0.5;
-      const centerRatio = width < 768 ? 0.36 : width < 1024 ? 0.46 : 0.52;
-      const cy = height * centerRatio;
+      const cy = height * getCenterRatio();
       const rx = Math.min(width * 0.24, height * 0.34);
       const ry = Math.min(height * 0.36, width * 0.42);
 
@@ -151,13 +162,31 @@ export const ThorLightning = memo(function ThorLightning({
         segments
       );
 
-      if (bolts.length >= 8) bolts.shift();
-      bolts.push({
-        segments,
-        life: 0,
-        maxLife: major ? 0.24 + Math.random() * 0.14 : 0.14 + Math.random() * 0.12,
-        intensity: major ? 1 : 0.65 + Math.random() * 0.3,
-      });
+      if (bolts.length >= 8) {
+        // Evict oldest/weakest slot in O(1)
+        let weakestIdx = 0;
+        let maxRatio = -1;
+        for (let i = 0; i < bolts.length; i++) {
+          const r = bolts[i].life / bolts[i].maxLife;
+          if (r > maxRatio) {
+            maxRatio = r;
+            weakestIdx = i;
+          }
+        }
+        bolts[weakestIdx] = {
+          segments,
+          life: 0,
+          maxLife: major ? 0.24 + Math.random() * 0.14 : 0.14 + Math.random() * 0.12,
+          intensity: major ? 1 : 0.65 + Math.random() * 0.3,
+        };
+      } else {
+        bolts.push({
+          segments,
+          life: 0,
+          maxLife: major ? 0.24 + Math.random() * 0.14 : 0.14 + Math.random() * 0.12,
+          intensity: major ? 1 : 0.65 + Math.random() * 0.3,
+        });
+      }
 
       if (major) {
         flashAlpha = Math.min(0.28, flashAlpha + 0.16);
@@ -167,8 +196,7 @@ export const ThorLightning = memo(function ThorLightning({
       for (let i = 0; i < sparkCount; i++) {
         const seg = segments[Math.floor(Math.random() * segments.length)];
         if (!seg) continue;
-        if (sparks.length >= 28) sparks.shift();
-        sparks.push({
+        const nextSpark: ElectricSpark = {
           x: seg.x1,
           y: seg.y1,
           vx: (Math.random() - 0.5) * 140,
@@ -176,13 +204,19 @@ export const ThorLightning = memo(function ThorLightning({
           life: 0,
           maxLife: 0.25 + Math.random() * 0.35,
           size: 1.2 + Math.random() * 2.0,
-        });
+        };
+        if (sparks.length >= 28) {
+          sparks[Math.floor(Math.random() * sparks.length)] = nextSpark;
+        } else {
+          sparks.push(nextSpark);
+        }
       }
     };
 
     const renderStatic = () => {
+      colorMix = targetMixRef.current;
       const cx = width * 0.5;
-      const cy = height * 0.45;
+      const cy = height * getCenterRatio();
       const rOut = Math.round(lerp(56, 250, colorMix));
       const gOut = Math.round(lerp(189, 204, colorMix));
       const bOut = Math.round(lerp(248, 21, colorMix));
@@ -195,8 +229,10 @@ export const ThorLightning = memo(function ThorLightning({
     };
 
     if (prefersReducedMotion) {
+      renderStaticRef.current = renderStatic;
       renderStatic();
       return () => {
+        renderStaticRef.current = null;
         if (observer) observer.disconnect();
       };
     }
@@ -204,19 +240,17 @@ export const ThorLightning = memo(function ThorLightning({
     const minFrameMs = isCoarsePointer ? 32 : 0;
 
     const renderFrame = (now: number) => {
-      if (document.hidden) {
+      if (document.hidden || pausedRef.current) {
         rafId = 0;
         return;
       }
-      if (pausedRef.current || (minFrameMs > 0 && now - lastDraw < minFrameMs)) {
-        lastTime = now;
+      if (minFrameMs > 0 && now - lastDraw < minFrameMs) {
         rafId = window.requestAnimationFrame(renderFrame);
         return;
       }
-      lastDraw = now;
 
-      const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
-      lastTime = now;
+      const dt = Math.min(0.08, Math.max(0.001, (now - lastDraw) / 1000));
+      lastDraw = now;
 
       colorMix += (targetMixRef.current - colorMix) * Math.min(1, dt * 6.5);
 
@@ -241,7 +275,7 @@ export const ThorLightning = memo(function ThorLightning({
 
       if (flashAlpha > 0.005) {
         const cx = width * 0.5;
-        const cy = height * 0.42;
+        const cy = height * getCenterRatio();
         const radius = Math.min(width, height) * 0.52;
         const flashGrad = ctx.createRadialGradient(cx, cy, 10, cx, cy, radius);
         flashGrad.addColorStop(0, `rgba(${rMid}, ${gMid}, ${bMid}, ${flashAlpha * 0.85})`);
@@ -259,7 +293,8 @@ export const ThorLightning = memo(function ThorLightning({
         const bolt = bolts[i];
         bolt.life += dt;
         if (bolt.life >= bolt.maxLife) {
-          bolts.splice(i, 1);
+          bolts[i] = bolts[bolts.length - 1];
+          bolts.pop();
           continue;
         }
 
@@ -290,7 +325,8 @@ export const ThorLightning = memo(function ThorLightning({
         const s = sparks[i];
         s.life += dt;
         if (s.life >= s.maxLife) {
-          sparks.splice(i, 1);
+          sparks[i] = sparks[sparks.length - 1];
+          sparks.pop();
           continue;
         }
         s.x += s.vx * dt;
@@ -308,18 +344,21 @@ export const ThorLightning = memo(function ThorLightning({
     };
 
     const onVisibilityChange = () => {
-      if (!document.hidden && !rafId) {
-        lastTime = performance.now();
-        lastDraw = lastTime;
+      if (!document.hidden && !pausedRef.current && !rafId) {
+        lastDraw = performance.now();
         rafId = window.requestAnimationFrame(renderFrame);
       }
     };
+    resumeLoopRef.current = onVisibilityChange;
 
     document.addEventListener('visibilitychange', onVisibilityChange);
     window.addEventListener('pageshow', onVisibilityChange);
-    rafId = window.requestAnimationFrame(renderFrame);
+    if (!pausedRef.current) {
+      rafId = window.requestAnimationFrame(renderFrame);
+    }
 
     return () => {
+      resumeLoopRef.current = null;
       window.cancelAnimationFrame(rafId);
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('pageshow', onVisibilityChange);

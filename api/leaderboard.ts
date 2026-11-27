@@ -2,7 +2,17 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 const LEADERBOARD_SCORES_KEY = 'avengers_doomsday_game_scores';
 const LEADERBOARD_PLAYERS_KEY = 'avengers_doomsday_game_players';
+const MAX_LEADERBOARD_ENTRIES = 500;
 const UPSTREAM_TIMEOUT_MS = 5000;
+
+class ClientRequestError extends Error {
+  public readonly statusCode: number;
+
+  constructor(message: string, statusCode = 400) {
+    super(message);
+    this.statusCode = statusCode;
+  }
+}
 
 interface LeaderboardEntry {
   id: string;
@@ -116,7 +126,7 @@ async function getTopLeaderboard(url: string, token: string): Promise<Leaderboar
     'ZREVRANGE',
     LEADERBOARD_SCORES_KEY,
     0,
-    -1,
+    MAX_LEADERBOARD_ENTRIES - 1,
     'WITHSCORES',
   ]);
 
@@ -177,10 +187,14 @@ async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknow
     if (typeof preParsedBody === 'string') {
       const trimmed = preParsedBody.trim();
       if (!trimmed) return {};
-      const parsed = JSON.parse(trimmed);
-      return typeof parsed === 'object' && parsed !== null
-        ? (parsed as Record<string, unknown>)
-        : {};
+      try {
+        const parsed = JSON.parse(trimmed);
+        return typeof parsed === 'object' && parsed !== null
+          ? (parsed as Record<string, unknown>)
+          : {};
+      } catch {
+        throw new ClientRequestError('Invalid JSON payload', 400);
+      }
     }
     if (typeof preParsedBody === 'object') {
       return preParsedBody as Record<string, unknown>;
@@ -193,14 +207,18 @@ async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknow
     const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     total += buf.length;
     if (total > 8192) {
-      throw new Error('Request payload too large');
+      throw new ClientRequestError('Request payload too large', 413);
     }
     chunks.push(buf);
   }
   const raw = Buffer.concat(chunks).toString('utf8').trim();
   if (!raw) return {};
-  const parsed = JSON.parse(raw);
-  return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    throw new ClientRequestError('Invalid JSON payload', 400);
+  }
 }
 
 function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
@@ -246,7 +264,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const rawScore = Number(body.score);
     const score = Number.isFinite(rawScore) ? Math.min(50000, Math.max(0, Math.floor(rawScore))) : 0;
     const rawCombo = Number(body.bestCombo);
-    const bestCombo = Number.isFinite(rawCombo) ? Math.min(20, Math.max(1, Math.floor(rawCombo))) : 1;
+    const bestCombo = Number.isFinite(rawCombo) ? Math.min(1000, Math.max(1, Math.floor(rawCombo))) : 1;
     const rawPopped = Number(body.popped);
     const popped = Number.isFinite(rawPopped) ? Math.min(1000, Math.max(0, Math.floor(rawPopped))) : 0;
 
@@ -302,7 +320,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       source: 'redis',
     } satisfies LeaderboardResponse);
   } catch (error) {
+    const statusCode = error instanceof ClientRequestError ? error.statusCode : 502;
     const message = error instanceof Error ? error.message : 'Failed to update leaderboard';
-    sendJson(res, 502, { error: message });
+    sendJson(res, statusCode, { error: message });
   }
 }

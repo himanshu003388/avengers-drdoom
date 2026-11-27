@@ -1,5 +1,6 @@
 import { Calendar, Check, Lock, Sparkles, Users, X } from 'lucide-react';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 import type {
   GroupSizeOption,
   PublicWatchlistEntry,
@@ -53,8 +54,16 @@ export function InterestModal({
   const [contact, setContact] = useState('');
   const [error, setError] = useState('');
 
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const wasOpenRef = useRef(false);
+
+  useModalBehavior(open, onClose, panelRef);
+
+  // Initialize form state ONLY on closed -> open transition so background polls never reset mid-edit
   useEffect(() => {
-    if (!open) return;
+    const wasOpen = wasOpenRef.current;
+    wasOpenRef.current = open;
+    if (!open || wasOpen) return;
 
     if (existingRsvp) {
       setName(existingRsvp.name);
@@ -69,36 +78,29 @@ export function InterestModal({
     setError('');
   }, [open, existingRsvp]);
 
-  useEffect(() => {
-    if (!open) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
+  const { dec17Count, after17Count, totalTagged, dec17Pct } = useMemo(() => {
+    let dec17 = 0;
+    let after17 = 0;
+    for (const entry of entries) {
+      if (entry.watchDate === 'dec-17') dec17++;
+      else after17++;
+    }
+    const total = dec17 + after17;
+    return {
+      dec17Count: dec17,
+      after17Count: after17,
+      totalTagged: total,
+      dec17Pct: total > 0 ? Math.round((dec17 / total) * 100) : 50,
     };
-
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [open, onClose]);
+  }, [entries]);
 
   if (!open) return null;
 
   const showConfirmedPass = Boolean(existingRsvp) && !editing;
-  const dec17Count = entries.filter((e) => e.watchDate === 'dec-17').length;
-  const after17Count = entries.filter((e) => e.watchDate === 'after-17').length;
-  const totalTagged = dec17Count + after17Count;
-  const dec17Pct = totalTagged > 0 ? Math.round((dec17Count / totalTagged) * 100) : 50;
 
   const handleFormSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const trimmedName = name.trim();
+    const trimmedName = name.replace(/\s+/g, ' ').trim();
     if (!trimmedName) {
       setError('Please enter your name so others can see you on the watchlist.');
       return;
@@ -121,12 +123,12 @@ export function InterestModal({
       aria-modal="true"
       aria-labelledby="interest-modal-title"
       className="animate-modal-backdrop fixed inset-0 z-50 flex items-center justify-center overscroll-contain bg-black/88 p-4"
-      onClick={() => {
-        onClose();
-      }}
+      onClick={onClose}
     >
       <div
-        className="animate-modal-panel doom-hud-card relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto scroll-smooth rounded-2xl border !bg-[#050c08] p-5 shadow-2xl sm:p-6"
+        ref={panelRef}
+        tabIndex={-1}
+        className="animate-modal-panel doom-hud-card relative max-h-[calc(100dvh-2rem)] w-full max-w-lg touch-pan-y overflow-y-auto scroll-smooth rounded-2xl border !bg-[#050c08] p-5 shadow-2xl focus:outline-none sm:p-6"
         style={{
           borderColor: `${accentHex}55`,
           boxShadow: `0 0 54px ${accentHex}2a`,
@@ -152,13 +154,11 @@ export function InterestModal({
 
           <button
             type="button"
-            onClick={() => {
-              onClose();
-            }}
+            onClick={onClose}
             aria-label="Close RSVP modal"
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/75 transition hover:border-white/40 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-white/75"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -173,35 +173,37 @@ export function InterestModal({
               }}
             >
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[10px] font-semibold tracking-[0.2em] text-white/60 uppercase">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold tracking-[0.2em] text-white/65 uppercase">
                     Attendee
                   </p>
-                  <p className="mt-0.5 text-lg font-bold text-white">{existingRsvp.name}</p>
+                  <p className="mt-0.5 truncate text-lg font-bold text-white">{existingRsvp.name}</p>
                   {existingRsvp.info && (
-                    <p className="mt-0.5 text-xs text-white/70">{existingRsvp.info}</p>
+                    <p className="mt-0.5 text-xs text-white/75">{existingRsvp.info}</p>
                   )}
                 </div>
 
                 <span
-                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold tracking-[0.14em] uppercase"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-bold tracking-[0.14em] uppercase"
                   style={{
                     borderColor: `${accentHex}70`,
                     backgroundColor: `${accentHex}26`,
                     color: accentHex,
                   }}
                 >
-                  <Check className="h-3.5 w-3.5" />
+                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
                   {existingRsvp.watchDate === 'dec-17' ? 'Dec 17' : 'After Dec 17'}
                 </span>
               </div>
 
-              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3 text-xs text-white/70">
-                <Users className="h-3.5 w-3.5" style={{ color: accentHex }} />
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3 text-xs text-white/75">
+                <Users className="h-3.5 w-3.5" style={{ color: accentHex }} aria-hidden="true" />
                 <span>
                   {GROUP_OPTIONS.find((g) => g.value === existingRsvp.groupSize)?.label ?? 'Just Me'}
                 </span>
-                <span className="text-white/30">•</span>
+                <span className="text-white/40" aria-hidden="true">
+                  •
+                </span>
                 <span>Visible on public watchlist</span>
               </div>
             </div>
@@ -209,7 +211,7 @@ export function InterestModal({
             {/* Live Date Breakdown */}
             {totalTagged > 0 && (
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
-                <div className="flex items-center justify-between text-[11px] font-semibold tracking-[0.14em] text-white/75 uppercase">
+                <div className="flex items-center justify-between text-[11px] font-semibold tracking-[0.14em] text-white/80 uppercase">
                   <span>On Dec 17 ({dec17Count})</span>
                   <span>After Dec 17 ({after17Count})</span>
                 </div>
@@ -226,36 +228,32 @@ export function InterestModal({
             <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
               <button
                 type="button"
-                onClick={() => {
-                  setEditing(true);
-                }}
-                className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold tracking-[0.14em] text-white/80 uppercase transition hover:border-white/35 hover:text-white"
+                onClick={() => setEditing(true)}
+                className="min-h-[38px] rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-semibold tracking-[0.14em] text-white/85 uppercase transition hover:border-white/35 hover:text-white focus-visible:outline-2 focus-visible:outline-white/75"
               >
                 Edit Details
               </button>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onOpenWatchlist();
-                  }}
-                  style={{
-                    borderColor: `${accentHex}80`,
-                    backgroundColor: `${accentHex}26`,
-                  }}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-bold tracking-[0.14em] text-white uppercase transition hover:brightness-125"
-                >
-                  <Users className="h-3.5 w-3.5" style={{ color: accentHex }} />
-                  <span>See Who&apos;s Going ({entries.length})</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenWatchlist();
+                }}
+                style={{
+                  borderColor: `${accentHex}80`,
+                  backgroundColor: `${accentHex}26`,
+                }}
+                className="inline-flex min-h-[38px] items-center gap-1.5 rounded-full border px-4 py-2 text-xs font-bold tracking-[0.14em] text-white uppercase transition hover:brightness-125 focus-visible:outline-2 focus-visible:outline-white/75"
+              >
+                <Users className="h-3.5 w-3.5" style={{ color: accentHex }} aria-hidden="true" />
+                <span>See Who&apos;s Going ({entries.length})</span>
+              </button>
             </div>
           </div>
         ) : (
           <form onSubmit={handleFormSubmit} className="mt-4 space-y-4">
-            <p className="text-xs leading-relaxed text-white/70">
+            <p className="text-xs leading-relaxed text-white/75">
               Add your name and preferred date so fellow students can coordinate a group screening.
             </p>
 
@@ -263,10 +261,10 @@ export function InterestModal({
             <div>
               <label
                 htmlFor="rsvp-name"
-                className="block text-[11px] font-semibold tracking-[0.16em] text-white/85 uppercase"
+                className="block text-[11px] font-semibold tracking-[0.16em] text-white/90 uppercase"
               >
                 Your Name <span className="text-emerald-400">*</span>
-                <span className="ml-1.5 font-normal tracking-normal text-white/45 normal-case">
+                <span className="ml-1.5 font-normal tracking-normal text-white/60 normal-case">
                   (shown publicly)
                 </span>
               </label>
@@ -276,29 +274,42 @@ export function InterestModal({
                 maxLength={40}
                 required
                 autoFocus
+                autoComplete="name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? 'rsvp-form-error' : undefined}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (error) setError('');
+                }}
                 placeholder="e.g. Aarav Sharma"
-                className="mt-1.5 w-full rounded-xl border border-white/15 bg-black/55 px-3.5 py-2.5 text-sm text-white placeholder:text-white/35 focus:border-white/45 focus:outline-none"
+                className="mt-1.5 w-full rounded-xl border border-white/15 bg-black/55 px-3.5 py-2.5 text-sm text-white placeholder:text-white/50 focus:border-white/55 focus:outline-none"
               />
             </div>
 
             {/* Watch Date */}
             <div>
-              <span className="flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.16em] text-white/85 uppercase">
-                <Calendar className="h-3.5 w-3.5" style={{ color: accentHex }} />
+              <span
+                id="rsvp-date-label"
+                className="flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.16em] text-white/90 uppercase"
+              >
+                <Calendar className="h-3.5 w-3.5" style={{ color: accentHex }} aria-hidden="true" />
                 When do you want to watch?
               </span>
-              <div className="mt-1.5 grid grid-cols-2 gap-2.5">
+              <div
+                role="radiogroup"
+                aria-labelledby="rsvp-date-label"
+                className="mt-1.5 grid grid-cols-2 gap-2.5"
+              >
                 {DATE_OPTIONS.map((option) => {
                   const selected = watchDate === option.value;
                   return (
                     <button
                       key={option.value}
                       type="button"
-                      onClick={() => {
-                        setWatchDate(option.value);
-                      }}
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setWatchDate(option.value)}
                       style={
                         selected
                           ? {
@@ -308,16 +319,16 @@ export function InterestModal({
                             }
                           : undefined
                       }
-                      className={`rounded-xl border px-3 py-2.5 text-left transition ${
+                      className={`rounded-xl border px-3 py-2.5 text-left transition focus-visible:outline-2 focus-visible:outline-white/75 ${
                         selected
                           ? 'text-white'
-                          : 'border-white/15 bg-black/45 text-white/75 hover:border-white/30 hover:text-white'
+                          : 'border-white/15 bg-black/45 text-white/80 hover:border-white/30 hover:text-white'
                       }`}
                     >
                       <div className="text-xs font-bold tracking-[0.08em] uppercase">
                         {option.label}
                       </div>
-                      <div className="mt-0.5 text-[11px] text-white/55">{option.sub}</div>
+                      <div className="mt-0.5 text-[11px] text-white/65">{option.sub}</div>
                     </button>
                   );
                 })}
@@ -326,19 +337,26 @@ export function InterestModal({
 
             {/* Group Size */}
             <div>
-              <span className="block text-[11px] font-semibold tracking-[0.16em] text-white/85 uppercase">
+              <span
+                id="rsvp-group-label"
+                className="block text-[11px] font-semibold tracking-[0.16em] text-white/90 uppercase"
+              >
                 Group Size
               </span>
-              <div className="mt-1.5 grid grid-cols-3 gap-2">
+              <div
+                role="radiogroup"
+                aria-labelledby="rsvp-group-label"
+                className="mt-1.5 grid grid-cols-3 gap-2"
+              >
                 {GROUP_OPTIONS.map((option) => {
                   const selected = groupSize === option.value;
                   return (
                     <button
                       key={option.value}
                       type="button"
-                      onClick={() => {
-                        setGroupSize(option.value);
-                      }}
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setGroupSize(option.value)}
                       style={
                         selected
                           ? {
@@ -347,10 +365,10 @@ export function InterestModal({
                             }
                           : undefined
                       }
-                      className={`rounded-xl border px-2.5 py-2 text-center text-xs font-semibold transition ${
+                      className={`min-h-[40px] rounded-xl border px-2.5 py-2 text-center text-xs font-semibold transition focus-visible:outline-2 focus-visible:outline-white/75 ${
                         selected
                           ? 'text-white'
-                          : 'border-white/15 bg-black/45 text-white/70 hover:border-white/30 hover:text-white'
+                          : 'border-white/15 bg-black/45 text-white/75 hover:border-white/30 hover:text-white'
                       }`}
                     >
                       {option.label}
@@ -364,10 +382,10 @@ export function InterestModal({
             <div>
               <label
                 htmlFor="rsvp-info"
-                className="block text-[11px] font-semibold tracking-[0.16em] text-white/85 uppercase"
+                className="block text-[11px] font-semibold tracking-[0.16em] text-white/90 uppercase"
               >
                 Basic Info
-                <span className="ml-1.5 font-normal tracking-normal text-white/45 normal-case">
+                <span className="ml-1.5 font-normal tracking-normal text-white/60 normal-case">
                   (optional, shown publicly)
                 </span>
               </label>
@@ -378,7 +396,7 @@ export function InterestModal({
                 value={info}
                 onChange={(e) => setInfo(e.target.value)}
                 placeholder="e.g. CSE 3rd Year · Evening show preferred"
-                className="mt-1.5 w-full rounded-xl border border-white/15 bg-black/55 px-3.5 py-2.5 text-sm text-white placeholder:text-white/35 focus:border-white/45 focus:outline-none"
+                className="mt-1.5 w-full rounded-xl border border-white/15 bg-black/55 px-3.5 py-2.5 text-sm text-white placeholder:text-white/50 focus:border-white/55 focus:outline-none"
               />
             </div>
 
@@ -386,11 +404,11 @@ export function InterestModal({
             <div>
               <label
                 htmlFor="rsvp-contact"
-                className="flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.16em] text-white/85 uppercase"
+                className="flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.16em] text-white/90 uppercase"
               >
-                <Lock className="h-3 w-3 text-white/55" />
+                <Lock className="h-3 w-3 text-white/65" aria-hidden="true" />
                 <span>Gmail</span>
-                <span className="font-normal tracking-normal text-white/45 normal-case">
+                <span className="font-normal tracking-normal text-white/60 normal-case">
                   (optional, kept private)
                 </span>
               </label>
@@ -403,11 +421,15 @@ export function InterestModal({
                 value={contact}
                 onChange={(e) => setContact(e.target.value)}
                 placeholder="e.g. yourname@gmail.com (never shown publicly)"
-                className="mt-1.5 w-full rounded-xl border border-white/15 bg-black/55 px-3.5 py-2.5 text-sm text-white placeholder:text-white/35 focus:border-white/45 focus:outline-none"
+                className="mt-1.5 w-full rounded-xl border border-white/15 bg-black/55 px-3.5 py-2.5 text-sm text-white placeholder:text-white/50 focus:border-white/55 focus:outline-none"
               />
             </div>
 
-            {error && <p className="text-xs font-medium text-rose-400">{error}</p>}
+            {error && (
+              <p id="rsvp-form-error" role="alert" className="text-xs font-medium text-rose-400">
+                {error}
+              </p>
+            )}
 
             <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
               <button
@@ -419,7 +441,7 @@ export function InterestModal({
                     onClose();
                   }
                 }}
-                className="px-2 py-1.5 text-xs font-medium text-white/55 transition hover:text-white/85"
+                className="min-h-[38px] rounded-full px-3 py-1.5 text-xs font-medium text-white/70 transition hover:text-white focus-visible:outline-2 focus-visible:outline-white/75"
               >
                 {existingRsvp ? 'Cancel' : 'Skip for now'}
               </button>
@@ -432,9 +454,9 @@ export function InterestModal({
                   backgroundColor: `${accentHex}33`,
                   boxShadow: `0 0 24px ${accentHex}33`,
                 }}
-                className="inline-flex items-center gap-2 rounded-full border px-5 py-2.5 text-xs font-bold tracking-[0.16em] text-white uppercase transition hover:brightness-125 disabled:opacity-60"
+                className="inline-flex min-h-[42px] items-center gap-2 rounded-full border px-5 py-2.5 text-xs font-bold tracking-[0.16em] text-white uppercase transition hover:brightness-125 disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-white/75"
               >
-                <Sparkles className="h-3.5 w-3.5" style={{ color: accentHex }} />
+                <Sparkles className="h-3.5 w-3.5" style={{ color: accentHex }} aria-hidden="true" />
                 <span>
                   {submitting
                     ? 'Saving...'

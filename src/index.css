@@ -535,6 +535,16 @@
   animation-delay: var(--fluid-delay, 0ms);
 }
 
+@media (forced-colors: active) {
+  .doom-timer-cutout,
+  .doom-timer-label {
+    background-image: none;
+    color: CanvasText;
+    -webkit-text-fill-color: CanvasText;
+    filter: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-doom-glow,
   .animate-doom-bg-breathe,

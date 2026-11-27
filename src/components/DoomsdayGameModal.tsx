@@ -2,7 +2,6 @@ import {
   Crown,
   Flame,
   Gamepad2,
-  Medal,
   Play,
   RefreshCw,
   RotateCcw,
@@ -12,9 +11,12 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 import type { BubbleKind, LeaderboardEntry } from '../types/game';
+import { normalizeNameKey, sanitizeText } from '../utils/common';
 import { GameBubbleIcon } from './GameBubbleIcons';
+import { LeaderboardList } from './LeaderboardList';
 
 interface DoomsdayGameModalProps {
   open: boolean;
@@ -102,7 +104,7 @@ const BUBBLE_META: Record<
     badge: '+50',
   },
   bomb: {
-    label: 'Red Bomb',
+    label: 'Red Bomb — Instant Loss',
     shortLabel: 'Bomb',
     points: 0,
     ringColor: '#ef4444',
@@ -113,14 +115,36 @@ const BUBBLE_META: Record<
 
 function pickBubbleKind(progress: number): BubbleKind {
   const bombChance = 0.14 + progress * 0.12; // 14% -> 26% as round heats up
-  const roll = Math.random();
-  if (roll < bombChance) return 'bomb';
+  if (Math.random() < bombChance) return 'bomb';
 
   const heroRoll = Math.random();
   if (heroRoll < 0.12) return 'doom';
   if (heroRoll < 0.36) return 'ironman';
   if (heroRoll < 0.66) return 'thor';
   return 'avengers';
+}
+
+function pickSpawnXPct(existing: ActiveBubble[]): number {
+  let bestX = 12 + Math.random() * 76;
+  let bestClearance = -1;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = 12 + Math.random() * 76;
+    let minGap = 100;
+    for (let i = 0; i < existing.length; i++) {
+      const b = existing[i];
+      if (b.yPct > 84) {
+        const gap = Math.abs(b.xPct - candidate);
+        if (gap < minGap) minGap = gap;
+      }
+    }
+    if (minGap >= 18) return candidate;
+    if (minGap > bestClearance) {
+      bestClearance = minGap;
+      bestX = candidate;
+    }
+  }
+  return bestX;
 }
 
 function getBubbleSwayX(b: ActiveBubble): number {
@@ -160,157 +184,24 @@ function TacticalCorners({ color }: { color: string }) {
       <span
         aria-hidden="true"
         style={borderStyle}
-        className="pointer-events-none absolute top-2 left-2 z-20 h-3 w-3 border-t-2 border-l-2 rounded-tl-[2px]"
+        className="pointer-events-none absolute top-2 left-2 z-20 h-3 w-3 rounded-tl-[2px] border-t-2 border-l-2"
       />
       <span
         aria-hidden="true"
         style={borderStyle}
-        className="pointer-events-none absolute top-2 right-2 z-20 h-3 w-3 border-t-2 border-r-2 rounded-tr-[2px]"
+        className="pointer-events-none absolute top-2 right-2 z-20 h-3 w-3 rounded-tr-[2px] border-t-2 border-r-2"
       />
       <span
         aria-hidden="true"
         style={borderStyle}
-        className="pointer-events-none absolute bottom-2 left-2 z-20 h-3 w-3 border-b-2 border-l-2 rounded-bl-[2px]"
+        className="pointer-events-none absolute bottom-2 left-2 z-20 h-3 w-3 rounded-bl-[2px] border-b-2 border-l-2"
       />
       <span
         aria-hidden="true"
         style={borderStyle}
-        className="pointer-events-none absolute right-2 bottom-2 z-20 h-3 w-3 border-r-2 border-b-2 rounded-br-[2px]"
+        className="pointer-events-none absolute right-2 bottom-2 z-20 h-3 w-3 rounded-br-[2px] border-r-2 border-b-2"
       />
     </>
-  );
-}
-
-function LeaderboardList({
-  entries,
-  currentPlayerName,
-  accentHex,
-  loading,
-}: {
-  entries: LeaderboardEntry[];
-  currentPlayerName: string;
-  accentHex: string;
-  loading: boolean;
-}) {
-  const normalizedCurrent = currentPlayerName.toLowerCase().replace(/\s+/g, ' ').trim();
-
-  if (loading && entries.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-8 text-center">
-        <p className="text-xs font-semibold tracking-[0.18em] text-white/60 uppercase">
-          Syncing Arcade Rankings...
-        </p>
-      </div>
-    );
-  }
-
-  if (entries.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-white/10 bg-black/25 px-4 py-7 text-center">
-        <Trophy className="h-8 w-8 text-white/25" />
-        <p className="mt-2.5 text-sm font-bold tracking-[0.06em] text-white/85 uppercase">
-          Arena Unclaimed
-        </p>
-        <p className="mt-1 max-w-xs text-xs text-white/50">
-          Set the first high score on the campus scoreboard before the incursion hits.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <ul className="space-y-1.5">
-      {entries.map((entry, idx) => {
-        const isCurrent =
-          normalizedCurrent.length > 0 &&
-          entry.name.toLowerCase().replace(/\s+/g, ' ').trim() === normalizedCurrent;
-        const rank = idx + 1;
-        const isFirst = rank === 1;
-        const rankColor =
-          rank === 1
-            ? '#facc15'
-            : rank === 2
-              ? '#e2e8f0'
-              : rank === 3
-                ? '#fb923c'
-                : 'rgba(255,255,255,0.58)';
-
-        const rowStyle: CSSProperties & { '--fluid-delay'?: string } = {
-          '--fluid-delay': `${Math.min(idx, 15) * 20}ms`,
-          ...(isCurrent
-            ? {
-                borderColor: `${accentHex}75`,
-                backgroundColor: `${accentHex}17`,
-                boxShadow: `inset 0 0 18px ${accentHex}16`,
-              }
-            : isFirst
-              ? {
-                  borderColor: 'rgba(250, 204, 21, 0.28)',
-                  backgroundColor: 'rgba(250, 204, 21, 0.05)',
-                }
-              : {}),
-        };
-
-        return (
-          <li
-            key={entry.id}
-            style={rowStyle}
-            className={`animate-fluid-item flex items-center justify-between gap-2.5 rounded-xl border px-3 py-2 transition-colors duration-200 ${
-              isCurrent || isFirst
-                ? ''
-                : 'border-white/10 bg-white/[0.025] hover:border-white/20 hover:bg-white/[0.05]'
-            }`}
-          >
-            <div className="flex min-w-0 items-center gap-2.5">
-              <span
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/50 text-[11px] font-extrabold tabular-nums"
-                style={{
-                  color: rankColor,
-                  borderColor: rank <= 3 ? `${rankColor}44` : undefined,
-                }}
-              >
-                {rank === 1 ? (
-                  <Crown className="h-3.5 w-3.5" />
-                ) : rank <= 3 ? (
-                  <Medal className="h-3.5 w-3.5" />
-                ) : (
-                  rank
-                )}
-              </span>
-
-              <div className="min-w-0">
-                <p className="flex items-center gap-1.5 truncate text-xs font-bold text-white sm:text-sm">
-                  <span className="truncate">{entry.name}</span>
-                  {isCurrent && (
-                    <span
-                      className="shrink-0 rounded px-1.5 py-0.5 text-[9px] font-extrabold tracking-[0.08em] uppercase"
-                      style={{ backgroundColor: `${accentHex}2e`, color: accentHex }}
-                    >
-                      You
-                    </span>
-                  )}
-                </p>
-                <p className="text-[10px] font-medium text-white/50 tabular-nums">
-                  {entry.popped} popped · {entry.bestCombo}x max streak
-                </p>
-              </div>
-            </div>
-
-            <div className="flex shrink-0 items-baseline gap-1">
-              <span
-                className="font-marvel text-lg font-bold tracking-wider tabular-nums sm:text-xl"
-                style={{ color: isFirst ? '#facc15' : accentHex }}
-              >
-                {entry.score}
-              </span>
-              <span className="text-[9px] font-bold tracking-widest text-white/40 uppercase">
-                PTS
-              </span>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
   );
 }
 
@@ -344,8 +235,11 @@ export function DoomsdayGameModal({
   const [bubbles, setBubbles] = useState<ActiveBubble[]>([]);
   const [popEffects, setPopEffects] = useState<PopEffect[]>([]);
 
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const bubblesRef = useRef<ActiveBubble[]>([]);
+  const activeBubbleIdsRef = useRef<Set<number>>(new Set());
   const bubbleNodesRef = useRef<Map<number, HTMLButtonElement>>(new Map());
+  const popTimersRef = useRef<Set<number>>(new Set());
   const arenaRef = useRef<HTMLDivElement | null>(null);
   const arenaSizeRef = useRef<{ w: number; h: number }>({ w: 420, h: 460 });
   const progressBarRef = useRef<HTMLDivElement | null>(null);
@@ -359,15 +253,32 @@ export function DoomsdayGameModal({
   const roundIdRef = useRef(0);
   const wasOpenRef = useRef(false);
 
+  useModalBehavior(open, onClose, panelRef);
+
+  const clearPopTimers = useCallback(() => {
+    for (const timerId of popTimersRef.current) {
+      window.clearTimeout(timerId);
+    }
+    popTimersRef.current.clear();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearPopTimers();
+    };
+  }, [clearPopTimers]);
+
   useEffect(() => {
     const wasOpen = wasOpenRef.current;
     wasOpenRef.current = open;
 
     if (!open) {
       roundIdRef.current += 1;
+      clearPopTimers();
       setPhase('lobby');
       setBombFlash(false);
       bubblesRef.current = [];
+      activeBubbleIdsRef.current.clear();
       setBubbles([]);
       setPopEffects([]);
       return;
@@ -377,26 +288,7 @@ export function DoomsdayGameModal({
       setNameError('');
       setNameInput((prev) => (prev.trim() ? prev : playerName));
     }
-  }, [open, playerName]);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [open, onClose]);
+  }, [open, playerName, clearPopTimers]);
 
   const finishRound = useCallback(
     async (reason: EndReason) => {
@@ -407,9 +299,10 @@ export function DoomsdayGameModal({
       setEndReason(reason);
       setPhase('gameover');
       bubblesRef.current = [];
+      activeBubbleIdsRef.current.clear();
       setBubbles([]);
 
-      const cleanName = nameInput.replace(/\s+/g, ' ').trim();
+      const cleanName = sanitizeText(nameInput, 32);
       const result = await onSubmitScore({
         name: cleanName,
         score: scoreRef.current,
@@ -424,7 +317,7 @@ export function DoomsdayGameModal({
   );
 
   const startRound = useCallback(() => {
-    const cleanName = nameInput.replace(/\s+/g, ' ').trim();
+    const cleanName = sanitizeText(nameInput, 32);
     if (!cleanName) {
       setNameError('Enter your callsign first to play and join the leaderboard.');
       return;
@@ -433,6 +326,7 @@ export function DoomsdayGameModal({
     setNameError('');
     onPlayerNameChange(cleanName);
 
+    clearPopTimers();
     roundIdRef.current += 1;
     roundEndedRef.current = false;
     scoreRef.current = 0;
@@ -441,6 +335,7 @@ export function DoomsdayGameModal({
     poppedRef.current = 0;
     lastPopAtRef.current = 0;
     bubblesRef.current = [];
+    activeBubbleIdsRef.current.clear();
 
     setScore(0);
     setStreak(0);
@@ -452,7 +347,7 @@ export function DoomsdayGameModal({
     setBubbles([]);
     setPopEffects([]);
     setPhase('playing');
-  }, [nameInput, onPlayerNameChange]);
+  }, [nameInput, onPlayerNameChange, clearPopTimers]);
 
   useEffect(() => {
     if (!open || phase !== 'playing') return;
@@ -494,10 +389,11 @@ export function DoomsdayGameModal({
             : 60 + Math.random() * 10;
 
       const id = nextIdRef.current++;
+      activeBubbleIdsRef.current.add(id);
       bubblesRef.current.push({
         id,
         kind,
-        xPct: 12 + Math.random() * 76,
+        xPct: pickSpawnXPct(bubblesRef.current),
         yPct: 108,
         speedY: (baseSpeed + Math.random() * 5) * speedRamp,
         swayAmp: 2.6 + Math.random() * 2.6,
@@ -509,11 +405,18 @@ export function DoomsdayGameModal({
     };
 
     const tick = (now: number) => {
-      if (roundEndedRef.current) return;
+      if (roundEndedRef.current) {
+        rafId = 0;
+        return;
+      }
+      if (document.hidden) {
+        rafId = 0;
+        return;
+      }
 
       const rawDtMs = now - lastTime;
       lastTime = now;
-      const dtMs = document.hidden ? 0 : Math.min(50, Math.max(0, rawDtMs));
+      const dtMs = Math.min(50, Math.max(0, rawDtMs));
       const dtSec = dtMs / 1000;
 
       elapsedMs += dtMs;
@@ -561,6 +464,7 @@ export function DoomsdayGameModal({
           }
         } else {
           listChanged = true;
+          activeBubbleIdsRef.current.delete(b.id);
           bubbleNodesRef.current.delete(b.id);
         }
       }
@@ -573,15 +477,26 @@ export function DoomsdayGameModal({
       rafId = window.requestAnimationFrame(tick);
     };
 
+    const handleVisibilityChange = () => {
+      if (!document.hidden && !roundEndedRef.current && !rafId) {
+        lastTime = performance.now();
+        rafId = window.requestAnimationFrame(tick);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     rafId = window.requestAnimationFrame(tick);
     return () => {
       window.cancelAnimationFrame(rafId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       observer?.disconnect();
     };
   }, [open, phase, finishRound]);
 
   const handleBubbleTap = (bubble: ActiveBubble) => {
     if (roundEndedRef.current || phase !== 'playing') return;
+    if (!activeBubbleIdsRef.current.has(bubble.id)) return;
+    activeBubbleIdsRef.current.delete(bubble.id);
 
     if (bubble.kind === 'bomb') {
       setBombFlash(true);
@@ -608,6 +523,7 @@ export function DoomsdayGameModal({
     setScore(scoreRef.current);
     setPoppedCount(poppedRef.current);
 
+    bubbleNodesRef.current.delete(bubble.id);
     bubblesRef.current = bubblesRef.current.filter((b) => b.id !== bubble.id);
     setBubbles(bubblesRef.current);
 
@@ -621,9 +537,11 @@ export function DoomsdayGameModal({
       color: meta.ringColor,
     };
     setPopEffects((prev) => [...prev.slice(-10), effect]);
-    window.setTimeout(() => {
+    const timerId = window.setTimeout(() => {
+      popTimersRef.current.delete(timerId);
       setPopEffects((prev) => prev.filter((e) => e.id !== popId));
     }, 550);
+    popTimersRef.current.add(timerId);
   };
 
   const handleLobbySubmit = (e: FormEvent) => {
@@ -635,11 +553,9 @@ export function DoomsdayGameModal({
 
   const mult = getMultiplier(streak);
   const topScore = entries.length > 0 ? entries[0].score : 0;
-  const normalizedName = nameInput.toLowerCase().replace(/\s+/g, ' ').trim();
+  const normalizedName = normalizeNameKey(nameInput);
   const playerRankIndex = normalizedName
-    ? entries.findIndex(
-        (entry) => entry.name.toLowerCase().replace(/\s+/g, ' ').trim() === normalizedName
-      )
+    ? entries.findIndex((entry) => normalizeNameKey(entry.name) === normalizedName)
     : -1;
   const missionGrade = getMissionGrade(score, endReason);
   const isUrgentTime = timeLeftSec <= 7;
@@ -653,7 +569,9 @@ export function DoomsdayGameModal({
       onClick={onClose}
     >
       <div
-        className={`animate-modal-panel doom-hud-card relative flex h-[min(90dvh,45rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border !bg-[#040906] !backdrop-blur-none shadow-2xl transition-colors duration-300 ${
+        ref={panelRef}
+        tabIndex={-1}
+        className={`animate-modal-panel doom-hud-card relative flex h-[min(90dvh,45rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border !bg-[#040906] !backdrop-blur-none shadow-2xl transition-colors duration-300 focus:outline-none ${
           bombFlash ? 'animate-game-bomb-shake' : ''
         }`}
         style={{
@@ -692,14 +610,14 @@ export function DoomsdayGameModal({
                 boxShadow: `0 0 16px ${accentHex}24`,
               }}
             >
-              <Gamepad2 className="h-4.5 w-4.5" />
+              <Gamepad2 className="h-4.5 w-4.5" aria-hidden="true" />
             </span>
 
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
                 <span
                   aria-hidden="true"
-                  className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full"
+                  className="motion-reduce:animate-none inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full"
                   style={{ backgroundColor: accentHex, boxShadow: `0 0 8px ${accentHex}` }}
                 />
                 <p
@@ -728,7 +646,7 @@ export function DoomsdayGameModal({
                   color: '#fde047',
                 }}
               >
-                <Crown className="h-3 w-3" />
+                <Crown className="h-3 w-3" aria-hidden="true" />
                 Top: {topScore}
               </span>
             )}
@@ -742,7 +660,7 @@ export function DoomsdayGameModal({
                   color: accentHex,
                 }}
               >
-                <Target className="h-3 w-3" />
+                <Target className="h-3 w-3" aria-hidden="true" />
                 <span className="max-w-[8rem] truncate text-white">{nameInput.trim()}</span>
               </span>
             )}
@@ -753,7 +671,7 @@ export function DoomsdayGameModal({
               aria-label="Close game modal"
               className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/75 transition hover:border-white/40 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-white/75"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -771,12 +689,15 @@ export function DoomsdayGameModal({
               {/* Target Intel Strip */}
               <div className="rounded-xl border border-white/10 bg-[#060f0a] p-2.5 sm:p-3">
                 <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="inline-flex items-center gap-1.5 text-[9.5px] font-bold tracking-[0.18em] text-white/70 uppercase">
-                    <Target className="h-3 w-3" style={{ color: accentHex }} />
+                  <span className="inline-flex items-center gap-1.5 text-[9.5px] font-bold tracking-[0.18em] text-white/75 uppercase">
+                    <Target className="h-3 w-3" style={{ color: accentHex }} aria-hidden="true" />
                     Target Intel · 30s Blitz
                   </span>
-                  <span className="inline-flex items-center gap-1 text-[9.5px] font-bold tracking-[0.12em] uppercase" style={{ color: accentHex }}>
-                    <Zap className="h-3 w-3" />
+                  <span
+                    className="inline-flex items-center gap-1 text-[9.5px] font-bold tracking-[0.12em] uppercase"
+                    style={{ color: accentHex }}
+                  >
+                    <Zap className="h-3 w-3" aria-hidden="true" />
                     Fast Chain = 2x / 3x
                   </span>
                 </div>
@@ -803,7 +724,7 @@ export function DoomsdayGameModal({
                         >
                           <GameBubbleIcon kind={kind} className="h-5 w-5 sm:h-5.5 sm:w-5.5" />
                         </div>
-                        <span className="mt-1 truncate text-[9px] font-semibold text-white/70">
+                        <span className="mt-1 truncate text-[9px] font-semibold text-white/80">
                           {meta.shortLabel}
                         </span>
                         <span
@@ -823,12 +744,12 @@ export function DoomsdayGameModal({
                 <div className="min-w-0 flex-1">
                   <label
                     htmlFor="game-player-name"
-                    className="flex items-center justify-between text-[10px] font-bold tracking-[0.18em] text-white/80 uppercase"
+                    className="flex items-center justify-between text-[10px] font-bold tracking-[0.18em] text-white/85 uppercase"
                   >
                     <span>
                       Agent Callsign <span style={{ color: accentHex }}>*</span>
                     </span>
-                    <span className="font-normal tracking-normal text-rose-300/85 normal-case">
+                    <span className="font-normal tracking-normal text-rose-300/90 normal-case">
                       Avoid Red Bombs
                     </span>
                   </label>
@@ -838,12 +759,14 @@ export function DoomsdayGameModal({
                     maxLength={32}
                     required
                     value={nameInput}
+                    aria-invalid={Boolean(nameError)}
+                    aria-describedby={nameError ? 'game-name-error' : undefined}
                     onChange={(e) => {
                       setNameInput(e.target.value);
                       if (nameError) setNameError('');
                     }}
                     placeholder="Enter your name to deploy"
-                    className="mt-1.5 w-full rounded-xl border border-white/15 bg-black/60 px-3.5 py-2.5 text-sm font-medium text-white placeholder:text-white/35 transition focus:outline-none"
+                    className="mt-1.5 w-full rounded-xl border border-white/15 bg-black/60 px-3.5 py-2.5 text-sm font-medium text-white placeholder:text-white/50 transition focus:border-white/45 focus:outline-none"
                     style={{
                       borderColor: nameInput.trim() ? `${accentHex}55` : undefined,
                     }}
@@ -857,33 +780,36 @@ export function DoomsdayGameModal({
                     background: `linear-gradient(135deg, ${accentHex}4d 0%, ${accentHex}24 100%)`,
                     boxShadow: `0 0 28px ${accentHex}38, inset 0 1px 0 rgba(255,255,255,0.2)`,
                   }}
-                  className="group relative inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 overflow-hidden rounded-xl border px-6 py-2.5 text-xs font-extrabold tracking-[0.18em] text-white uppercase transition hover:brightness-125 active:scale-[0.98] sm:px-7 sm:text-sm"
+                  className="group relative inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 overflow-hidden rounded-xl border px-6 py-2.5 text-xs font-extrabold tracking-[0.18em] text-white uppercase transition hover:brightness-125 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-white/75 sm:px-7 sm:text-sm"
                 >
                   <span
                     aria-hidden="true"
                     className="animate-play-btn-shimmer pointer-events-none absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-transparent via-white/25 to-transparent"
                   />
                   <Play
+                    aria-hidden="true"
                     className="relative h-4 w-4 fill-current transition-transform duration-200 group-hover:scale-110"
                     style={{ color: accentHex }}
                   />
                   <span className="relative">Launch Game</span>
                 </button>
               </div>
-              {nameError && <p className="text-xs font-medium text-rose-400">{nameError}</p>}
+              {nameError && (
+                <p id="game-name-error" role="alert" className="text-xs font-medium text-rose-400">
+                  {nameError}
+                </p>
+              )}
             </form>
 
             {/* Hall of Heroes Leaderboard */}
-            <div className="min-h-0 flex-1 overflow-y-auto scroll-smooth px-3.5 py-3 sm:px-5">
+            <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto scroll-smooth px-3.5 py-3 sm:px-5">
               <div className="mb-2.5 flex items-center justify-between gap-2">
-                <p className="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-[0.2em] text-white/75 uppercase">
-                  <Trophy className="h-3.5 w-3.5" style={{ color: accentHex }} />
+                <p className="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-[0.2em] text-white/80 uppercase">
+                  <Trophy className="h-3.5 w-3.5" style={{ color: accentHex }} aria-hidden="true" />
                   <span>Hall of Heroes · Leaderboard</span>
                 </p>
                 <div className="flex items-center gap-2">
-                  <span
-                    className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-white/60"
-                  >
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-white/70">
                     {entries.length} {entries.length === 1 ? 'agent' : 'agents'}
                   </span>
                   <button
@@ -894,9 +820,12 @@ export function DoomsdayGameModal({
                     disabled={loadingLeaderboard}
                     aria-label="Refresh leaderboard"
                     title="Refresh leaderboard"
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/70 transition hover:border-white/35 hover:text-white disabled:opacity-50"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/75 transition hover:border-white/35 hover:text-white disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-white/75"
                   >
-                    <RefreshCw className={`h-3 w-3 ${loadingLeaderboard ? 'animate-spin' : ''}`} />
+                    <RefreshCw
+                      className={`h-3 w-3 ${loadingLeaderboard ? 'animate-spin' : ''}`}
+                      aria-hidden="true"
+                    />
                   </button>
                 </div>
               </div>
@@ -918,7 +847,7 @@ export function DoomsdayGameModal({
               <div className="grid grid-cols-3 items-center gap-2">
                 {/* Score & Pops */}
                 <div className="text-left">
-                  <p className="text-[9px] font-bold tracking-[0.2em] text-white/50 uppercase">
+                  <p className="text-[9px] font-bold tracking-[0.2em] text-white/60 uppercase">
                     Score · {poppedCount} pops
                   </p>
                   <p
@@ -951,11 +880,11 @@ export function DoomsdayGameModal({
                         : {
                             borderColor: 'rgba(255,255,255,0.12)',
                             backgroundColor: 'rgba(255,255,255,0.04)',
-                            color: 'rgba(255,255,255,0.55)',
+                            color: 'rgba(255,255,255,0.68)',
                           }
                     }
                   >
-                    <Flame className="h-3 w-3" />
+                    <Flame className="h-3 w-3" aria-hidden="true" />
                     <span>
                       {mult === 3
                         ? '3X OVERDRIVE'
@@ -970,12 +899,12 @@ export function DoomsdayGameModal({
 
                 {/* Countdown Timer */}
                 <div className="text-right">
-                  <p className="text-[9px] font-bold tracking-[0.2em] text-white/50 uppercase">
+                  <p className="text-[9px] font-bold tracking-[0.2em] text-white/60 uppercase">
                     Time Left
                   </p>
                   <p
                     className={`font-marvel text-2xl font-bold leading-none tabular-nums sm:text-3xl ${
-                      isUrgentTime ? 'animate-pulse text-rose-400' : 'text-white'
+                      isUrgentTime ? 'motion-reduce:animate-none animate-pulse text-rose-400' : 'text-white'
                     }`}
                   >
                     {timeLeftSec}s
@@ -1051,6 +980,12 @@ export function DoomsdayGameModal({
                       e.preventDefault();
                       handleBubbleTap(b);
                     }}
+                    onClick={(e) => {
+                      // Support keyboard Enter/Space activation (e.detail === 0) without double-firing pointer taps
+                      if (e.detail === 0) {
+                        handleBubbleTap(b);
+                      }
+                    }}
                     style={{
                       left: 0,
                       top: 0,
@@ -1064,8 +999,8 @@ export function DoomsdayGameModal({
                           ? '0 0 20px rgba(34, 197, 94, 0.5), inset 0 0 12px rgba(134, 239, 172, 0.28)'
                           : `0 0 14px ${meta.ringColor}45, inset 0 0 10px rgba(255, 255, 255, 0.16)`,
                     }}
-                    className={`absolute flex cursor-pointer items-center justify-center rounded-full border-2 will-change-transform active:scale-90 ${
-                      isBomb ? 'animate-pulse' : ''
+                    className={`absolute flex cursor-pointer items-center justify-center rounded-full border-2 will-change-transform active:scale-90 focus-visible:outline-2 focus-visible:outline-white ${
+                      isBomb ? 'motion-reduce:animate-none animate-pulse' : ''
                     }`}
                   >
                     <span
@@ -1081,6 +1016,7 @@ export function DoomsdayGameModal({
               {popEffects.map((effect) => (
                 <div
                   key={effect.id}
+                  aria-hidden="true"
                   style={{
                     left: `${effect.xPct}%`,
                     top: `${effect.yPct}%`,
@@ -1107,6 +1043,7 @@ export function DoomsdayGameModal({
         {phase === 'gameover' && (
           <div className="flex min-h-0 flex-1 flex-col">
             <div
+              role="status"
               className="border-b border-white/10 px-4 py-3.5 text-center sm:px-6 sm:py-4"
               style={{
                 background:
@@ -1124,12 +1061,12 @@ export function DoomsdayGameModal({
               >
                 {endReason === 'bomb' ? (
                   <>
-                    <ShieldAlert className="h-3.5 w-3.5 text-rose-400" />
+                    <ShieldAlert className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
                     <span className="text-rose-300">Incursion Detonated · Mission Failed</span>
                   </>
                 ) : (
                   <>
-                    <Trophy className="h-3.5 w-3.5" style={{ color: accentHex }} />
+                    <Trophy className="h-3.5 w-3.5" style={{ color: accentHex }} aria-hidden="true" />
                     <span style={{ color: accentHex }}>Mission Complete · {missionGrade.label}</span>
                   </>
                 )}
@@ -1149,7 +1086,7 @@ export function DoomsdayGameModal({
                   >
                     {score}
                   </span>
-                  <span className="text-xs font-bold tracking-[0.2em] text-white/60 uppercase">
+                  <span className="text-xs font-bold tracking-[0.2em] text-white/65 uppercase">
                     PTS
                   </span>
                 </div>
@@ -1179,7 +1116,7 @@ export function DoomsdayGameModal({
                       color: accentHex,
                     }}
                   >
-                    <Crown className="h-3 w-3" />
+                    <Crown className="h-3 w-3" aria-hidden="true" />
                     New Personal Best!
                   </span>
                 </div>
@@ -1188,7 +1125,7 @@ export function DoomsdayGameModal({
               {/* 3-Stat Debrief Grid */}
               <div className="mx-auto mt-3 grid max-w-md grid-cols-3 gap-2">
                 <div className="rounded-xl border border-white/10 bg-black/45 px-2 py-1.5">
-                  <p className="text-[9px] font-bold tracking-[0.15em] text-white/50 uppercase">
+                  <p className="text-[9px] font-bold tracking-[0.15em] text-white/60 uppercase">
                     Popped
                   </p>
                   <p className="font-marvel text-lg font-bold text-white tabular-nums">
@@ -1196,7 +1133,7 @@ export function DoomsdayGameModal({
                   </p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/45 px-2 py-1.5">
-                  <p className="text-[9px] font-bold tracking-[0.15em] text-white/50 uppercase">
+                  <p className="text-[9px] font-bold tracking-[0.15em] text-white/60 uppercase">
                     Max Streak
                   </p>
                   <p className="font-marvel text-lg font-bold text-white tabular-nums">
@@ -1204,7 +1141,7 @@ export function DoomsdayGameModal({
                   </p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/45 px-2 py-1.5">
-                  <p className="text-[9px] font-bold tracking-[0.15em] text-white/50 uppercase">
+                  <p className="text-[9px] font-bold tracking-[0.15em] text-white/60 uppercase">
                     Board Rank
                   </p>
                   <p
@@ -1217,10 +1154,10 @@ export function DoomsdayGameModal({
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto scroll-smooth px-3.5 py-3 sm:px-5">
+            <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto scroll-smooth px-3.5 py-3 sm:px-5">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-[0.2em] text-white/70 uppercase">
-                  <Trophy className="h-3.5 w-3.5" style={{ color: accentHex }} />
+                <p className="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-[0.2em] text-white/80 uppercase">
+                  <Trophy className="h-3.5 w-3.5" style={{ color: accentHex }} aria-hidden="true" />
                   <span>
                     Campus Leaderboard · {entries.length}{' '}
                     {entries.length === 1 ? 'agent' : 'agents'}
@@ -1228,7 +1165,7 @@ export function DoomsdayGameModal({
                 </p>
                 <div className="flex items-center gap-2">
                   {submittingScore && (
-                    <span className="text-[10px] text-white/45">Syncing score...</span>
+                    <span className="text-[10px] text-white/60">Syncing score...</span>
                   )}
                   <button
                     type="button"
@@ -1238,9 +1175,12 @@ export function DoomsdayGameModal({
                     disabled={loadingLeaderboard}
                     aria-label="Refresh leaderboard"
                     title="Refresh leaderboard"
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/70 transition hover:border-white/35 hover:text-white disabled:opacity-50"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/75 transition hover:border-white/35 hover:text-white disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-white/75"
                   >
-                    <RefreshCw className={`h-3 w-3 ${loadingLeaderboard ? 'animate-spin' : ''}`} />
+                    <RefreshCw
+                      className={`h-3 w-3 ${loadingLeaderboard ? 'animate-spin' : ''}`}
+                      aria-hidden="true"
+                    />
                   </button>
                 </div>
               </div>
@@ -1259,7 +1199,7 @@ export function DoomsdayGameModal({
                   setBombFlash(false);
                   setPhase('lobby');
                 }}
-                className="min-h-[40px] rounded-full border border-white/15 bg-white/5 px-4 py-2 text-[11px] font-semibold tracking-[0.12em] text-white/75 uppercase transition hover:border-white/35 hover:text-white"
+                className="min-h-[40px] rounded-full border border-white/15 bg-white/5 px-4 py-2 text-[11px] font-semibold tracking-[0.12em] text-white/85 uppercase transition hover:border-white/35 hover:text-white focus-visible:outline-2 focus-visible:outline-white/75"
               >
                 Change Callsign
               </button>
@@ -1272,13 +1212,13 @@ export function DoomsdayGameModal({
                   background: `linear-gradient(135deg, ${accentHex}45 0%, ${accentHex}22 100%)`,
                   boxShadow: `0 0 24px ${accentHex}36`,
                 }}
-                className="relative inline-flex min-h-[40px] items-center gap-1.5 overflow-hidden rounded-full border px-5 py-2 text-xs font-extrabold tracking-[0.16em] text-white uppercase transition hover:brightness-125 active:scale-[0.98]"
+                className="relative inline-flex min-h-[40px] items-center gap-1.5 overflow-hidden rounded-full border px-5 py-2 text-xs font-extrabold tracking-[0.16em] text-white uppercase transition hover:brightness-125 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-white/75"
               >
                 <span
                   aria-hidden="true"
                   className="animate-play-btn-shimmer pointer-events-none absolute inset-y-0 left-0 w-1/2 bg-gradient-to-r from-transparent via-white/25 to-transparent"
                 />
-                <RotateCcw className="relative h-3.5 w-3.5" style={{ color: accentHex }} />
+                <RotateCcw className="relative h-3.5 w-3.5" style={{ color: accentHex }} aria-hidden="true" />
                 <span className="relative">Play Again</span>
               </button>
             </div>

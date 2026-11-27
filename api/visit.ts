@@ -59,8 +59,8 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return;
   }
 
-  const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : '';
-  if (BOT_UA_PATTERN.test(userAgent)) {
+  const userAgent = typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'].trim() : '';
+  if (!userAgent || BOT_UA_PATTERN.test(userAgent)) {
     res.statusCode = 204;
     res.setHeader('X-Visit-Recorded', '0');
     res.end();

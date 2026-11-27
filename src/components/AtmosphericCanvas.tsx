@@ -107,13 +107,16 @@ export const AtmosphericCanvas = memo(function AtmosphericCanvas({
   const tintRef = useRef<[number, number, number]>(getEmberTintColor(activeCharacter.emberTint));
   const pausedRef = useRef<boolean>(paused);
   const resumeLoopRef = useRef<(() => void) | null>(null);
+  const renderStaticRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     intensityRef.current = getShaderIntensity(mode);
+    renderStaticRef.current?.();
   }, [mode]);
 
   useEffect(() => {
     tintRef.current = getEmberTintColor(activeCharacter.emberTint);
+    renderStaticRef.current?.();
   }, [activeCharacter.emberTint]);
 
   useEffect(() => {
@@ -146,10 +149,18 @@ export const AtmosphericCanvas = memo(function AtmosphericCanvas({
     let uMobile: WebGLUniformLocation | null = null;
     let uTintColor: WebGLUniformLocation | null = null;
 
+    let cssWidth = canvas.clientWidth || window.innerWidth || 1280;
+    let cssHeight = canvas.clientHeight || window.innerHeight || 720;
+
     const syncSize = () => {
-      const cw = canvas.clientWidth || window.innerWidth || 1280;
-      const ch = canvas.clientHeight || window.innerHeight || 720;
-      const target = computeShaderBufferSize(cw, ch, isSoftwareRenderer, isCoarsePointer || cw <= 768);
+      cssWidth = canvas.clientWidth || window.innerWidth || 1280;
+      cssHeight = canvas.clientHeight || window.innerHeight || 720;
+      const target = computeShaderBufferSize(
+        cssWidth,
+        cssHeight,
+        isSoftwareRenderer,
+        isCoarsePointer || cssWidth <= 768
+      );
       if (canvas.width !== target.width || canvas.height !== target.height) {
         canvas.width = target.width;
         canvas.height = target.height;
@@ -257,17 +268,16 @@ export const AtmosphericCanvas = memo(function AtmosphericCanvas({
     const mouse = { x: canvas.width / 2, y: canvas.height / 2 };
 
     const handlePointerMove = (event: PointerEvent) => {
-      if (event.pointerType === 'touch') return;
-      const rect = canvas.getBoundingClientRect();
-      if (rect.width && rect.height) {
-        const nx = (event.clientX - rect.left) / rect.width;
-        const ny = 1.0 - (event.clientY - rect.top) / rect.height;
+      if (event.pointerType === 'touch' || pausedRef.current) return;
+      if (cssWidth > 0 && cssHeight > 0) {
+        const nx = event.clientX / cssWidth;
+        const ny = 1.0 - event.clientY / cssHeight;
         mouse.x = nx * canvas.width;
         mouse.y = ny * canvas.height;
       }
     };
 
-    const renderFrame = (elapsedSec: number, dt = 0.016) => {
+    const renderFrame = (elapsedSec: number, dt = 0.016, snapProps = false) => {
       if (!gl || contextLost || !program) return;
       if (!resizeObserver) syncSize();
 
@@ -275,14 +285,21 @@ export const AtmosphericCanvas = memo(function AtmosphericCanvas({
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
 
-      const modeEase = 1 - Math.exp(-5.0 * dt);
-      const tintEase = 1 - Math.exp(-4.8 * dt);
-      currentIntensity += (intensityRef.current - currentIntensity) * modeEase;
-      currentTint[0] += (tintRef.current[0] - currentTint[0]) * tintEase;
-      currentTint[1] += (tintRef.current[1] - currentTint[1]) * tintEase;
-      currentTint[2] += (tintRef.current[2] - currentTint[2]) * tintEase;
+      if (snapProps) {
+        currentIntensity = intensityRef.current;
+        currentTint[0] = tintRef.current[0];
+        currentTint[1] = tintRef.current[1];
+        currentTint[2] = tintRef.current[2];
+      } else {
+        const modeEase = 1 - Math.exp(-5.0 * dt);
+        const tintEase = 1 - Math.exp(-4.8 * dt);
+        currentIntensity += (intensityRef.current - currentIntensity) * modeEase;
+        currentTint[0] += (tintRef.current[0] - currentTint[0]) * tintEase;
+        currentTint[1] += (tintRef.current[1] - currentTint[1]) * tintEase;
+        currentTint[2] += (tintRef.current[2] - currentTint[2]) * tintEase;
+      }
 
-      const isMobileNow = isCoarsePointer || (canvas.clientWidth || window.innerWidth) <= 768 ? 1.0 : 0.0;
+      const isMobileNow = isCoarsePointer || cssWidth <= 768 ? 1.0 : 0.0;
       if (uTime) gl.uniform1f(uTime, elapsedSec);
       if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
       if (uMouse) gl.uniform2f(uMouse, mouse.x, mouse.y);
@@ -295,7 +312,6 @@ export const AtmosphericCanvas = memo(function AtmosphericCanvas({
 
     const minFrameMs = isCoarsePointer ? 32 : 0;
     let lastRender = performance.now();
-    let lastTick = lastRender;
     let elapsedSec = 0;
 
     const loop = (t: number) => {
@@ -304,12 +320,10 @@ export const AtmosphericCanvas = memo(function AtmosphericCanvas({
         return;
       }
       if (minFrameMs > 0 && t - lastRender < minFrameMs) {
-        lastTick = t;
         rafId = window.requestAnimationFrame(loop);
         return;
       }
-      const dt = Math.min(0.05, Math.max(0.001, (t - lastTick) / 1000));
-      lastTick = t;
+      const dt = Math.min(0.08, Math.max(0.001, (t - lastRender) / 1000));
       lastRender = t;
       elapsedSec += dt;
       // Keep u_time bounded so noise coordinates never lose precision on long-open tabs
@@ -320,12 +334,12 @@ export const AtmosphericCanvas = memo(function AtmosphericCanvas({
 
     const resumeIfVisible = () => {
       if (!document.hidden && !contextLost && !prefersReducedMotion && !pausedRef.current && !rafId) {
-        lastTick = performance.now();
-        lastRender = lastTick;
+        lastRender = performance.now();
         rafId = window.requestAnimationFrame(loop);
       }
     };
     resumeLoopRef.current = resumeIfVisible;
+    renderStaticRef.current = prefersReducedMotion ? () => renderFrame(2.4, 0, true) : null;
 
     const onContextLost = (e: Event) => {
       e.preventDefault();
@@ -337,11 +351,10 @@ export const AtmosphericCanvas = memo(function AtmosphericCanvas({
     const onContextRestored = () => {
       contextLost = false;
       if (initGl()) {
-        if (prefersReducedMotion) {
-          renderFrame(2.4);
+        if (prefersReducedMotion || pausedRef.current) {
+          renderFrame(elapsedSec || 2.4, 0, true);
         } else if (!document.hidden && !rafId) {
-          lastTick = performance.now();
-          lastRender = lastTick;
+          lastRender = performance.now();
           rafId = window.requestAnimationFrame(loop);
         }
       }
@@ -359,13 +372,14 @@ export const AtmosphericCanvas = memo(function AtmosphericCanvas({
     }
 
     if (prefersReducedMotion) {
-      renderFrame(2.4);
-    } else {
+      renderFrame(2.4, 0, true);
+    } else if (!pausedRef.current) {
       rafId = window.requestAnimationFrame(loop);
     }
 
     return () => {
       resumeLoopRef.current = null;
+      renderStaticRef.current = null;
       window.cancelAnimationFrame(rafId);
       canvas.removeEventListener('webglcontextlost', onContextLost);
       canvas.removeEventListener('webglcontextrestored', onContextRestored);

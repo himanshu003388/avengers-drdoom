@@ -74,7 +74,7 @@ export const HeroSection = memo(function HeroSection({
       <div className="flex w-full shrink-0 items-start justify-between gap-4">
         <div
           aria-live="polite"
-          className="pointer-events-none min-w-0 max-w-[min(78vw,17.5rem)] text-left sm:max-w-[19rem] lg:max-w-[20.5rem] [@media(max-height:540px)]:hidden"
+          className="pointer-events-none min-w-0 max-w-[calc(100%-10.25rem)] text-left sm:max-w-[calc(100%-11.5rem)] md:max-w-[20.5rem] [@media(max-height:540px)]:hidden"
         >
           <div key={`hud-${activeCharacter.id}`} className={textAnimClass}>
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
@@ -274,12 +274,13 @@ export const HeroSection = memo(function HeroSection({
         <button
           type="button"
           onClick={() => onStepDossier(1)}
-          aria-label="Scroll or click to cycle character dossiers"
-          className="mt-[clamp(0.25rem,1.1dvh,1rem)] inline-flex min-h-[32px] items-center gap-1.5 px-3 py-1 text-[clamp(0.5625rem,1.3vw,0.625rem)] font-semibold tracking-[0.24em] text-white/65 uppercase transition hover:text-white/95 sm:min-h-[36px] focus-visible:outline-2 focus-visible:outline-white/75"
+          aria-label={`Next dossier (${activeIndex + 1} of ${characters.length}): scroll or click to switch`}
+          className="mt-[clamp(0.25rem,1.1dvh,1rem)] inline-flex min-h-[32px] items-center gap-1.5 rounded-full px-3 py-1 text-[clamp(0.5625rem,1.3vw,0.625rem)] font-semibold tracking-[0.24em] text-white/70 uppercase transition hover:text-white/95 sm:min-h-[36px] focus-visible:outline-2 focus-visible:outline-white/75"
         >
           <span>Scroll to switch dossier</span>
           <ChevronDown
-            className="h-3.5 w-3.5 animate-bounce"
+            aria-hidden="true"
+            className="motion-reduce:animate-none h-3.5 w-3.5 animate-bounce"
             style={{ color: activeCharacter.accentHex }}
           />
         </button>

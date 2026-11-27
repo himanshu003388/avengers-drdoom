@@ -41,13 +41,16 @@ export const DoomsdayWebGLScene = memo(function DoomsdayWebGLScene({
   const modeRef = useRef(mode);
   const pausedRef = useRef(paused);
   const resumeLoopRef = useRef<(() => void) | null>(null);
+  const renderStaticRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     targetRgbRef.current = hexToRgb(accentHex);
+    renderStaticRef.current?.();
   }, [accentHex]);
 
   useEffect(() => {
     modeRef.current = mode;
+    renderStaticRef.current?.();
   }, [mode]);
 
   useEffect(() => {
@@ -119,25 +122,30 @@ export const DoomsdayWebGLScene = memo(function DoomsdayWebGLScene({
 
     const minFrameMs = isCoarsePointer ? 33 : 0;
     let rafId = 0;
-    let lastTime = performance.now();
-    let lastRenderTime = lastTime;
+    let lastRenderTime = performance.now();
     let elapsed = 0;
     let lastFillStyle = '';
     let lastR = -1;
     let lastG = -1;
     let lastB = -1;
 
-    const drawFrame = (delta: number) => {
+    const drawFrame = (delta: number, snapColor = false) => {
       elapsed += delta;
       const isSurge = modeRef.current === 'ember-surge';
       const surgeMult = isSurge ? 2.4 : 1.0;
       const surgeAlphaBoost = isSurge ? 1.18 : 1.0;
 
-      const colorEase = 1 - Math.exp(-4.8 * delta);
       const target = targetRgbRef.current;
-      currentRgb[0] += (target[0] - currentRgb[0]) * colorEase;
-      currentRgb[1] += (target[1] - currentRgb[1]) * colorEase;
-      currentRgb[2] += (target[2] - currentRgb[2]) * colorEase;
+      if (snapColor) {
+        currentRgb[0] = target[0];
+        currentRgb[1] = target[1];
+        currentRgb[2] = target[2];
+      } else {
+        const colorEase = 1 - Math.exp(-4.8 * delta);
+        currentRgb[0] += (target[0] - currentRgb[0]) * colorEase;
+        currentRgb[1] += (target[1] - currentRgb[1]) * colorEase;
+        currentRgb[2] += (target[2] - currentRgb[2]) * colorEase;
+      }
 
       const cr = Math.min(255, Math.round(currentRgb[0] * 1.08));
       const cg = Math.min(255, Math.round(currentRgb[1] * 1.12));
@@ -204,7 +212,16 @@ export const DoomsdayWebGLScene = memo(function DoomsdayWebGLScene({
     };
 
     if (prefersReducedMotion) {
-      drawFrame(0);
+      renderStaticRef.current = () => drawFrame(0, true);
+      drawFrame(0, true);
+      return () => {
+        renderStaticRef.current = null;
+        if (!isCoarsePointer) {
+          window.removeEventListener('pointermove', handlePointerMove);
+        }
+        window.removeEventListener('resize', syncSize);
+        if (resizeObserver) resizeObserver.disconnect();
+      };
     } else {
       const tick = (now: number) => {
         if (document.hidden || pausedRef.current) {
@@ -212,12 +229,10 @@ export const DoomsdayWebGLScene = memo(function DoomsdayWebGLScene({
           return;
         }
         if (minFrameMs > 0 && now - lastRenderTime < minFrameMs) {
-          lastTime = now;
           rafId = window.requestAnimationFrame(tick);
           return;
         }
-        const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
-        lastTime = now;
+        const dt = Math.min(0.08, Math.max(0.001, (now - lastRenderTime) / 1000));
         lastRenderTime = now;
         drawFrame(dt);
         rafId = window.requestAnimationFrame(tick);
@@ -225,8 +240,7 @@ export const DoomsdayWebGLScene = memo(function DoomsdayWebGLScene({
 
       const onVisibilityChange = () => {
         if (!document.hidden && !pausedRef.current && !rafId) {
-          lastTime = performance.now();
-          lastRenderTime = lastTime;
+          lastRenderTime = performance.now();
           rafId = window.requestAnimationFrame(tick);
         }
       };
@@ -250,14 +264,6 @@ export const DoomsdayWebGLScene = memo(function DoomsdayWebGLScene({
         if (resizeObserver) resizeObserver.disconnect();
       };
     }
-
-    return () => {
-      if (!isCoarsePointer) {
-        window.removeEventListener('pointermove', handlePointerMove);
-      }
-      window.removeEventListener('resize', syncSize);
-      if (resizeObserver) resizeObserver.disconnect();
-    };
   }, []);
 
   return (

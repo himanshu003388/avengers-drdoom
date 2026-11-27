@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LeaderboardEntry } from '../types/game';
+import {
+  normalizeNameKey,
+  readStorageJson,
+  readStorageString,
+  sanitizeText,
+  writeStorage,
+} from '../utils/common';
 
 const API_LEADERBOARD_URL = '/api/leaderboard';
 const LEADERBOARD_STORAGE_KEY = 'doomsday_game_leaderboard';
@@ -18,10 +25,6 @@ interface ApiLeaderboardResponse {
 
 interface UseLeaderboardOptions {
   activeModalOpen?: boolean;
-}
-
-function normalizeNameKey(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 function compareLeaderboardEntries(a: LeaderboardEntry, b: LeaderboardEntry): number {
@@ -45,7 +48,7 @@ function parseEntries(raw: unknown): LeaderboardEntry[] {
       Number.isFinite((item as LeaderboardEntry).score)
     ) {
       const entry = item as LeaderboardEntry;
-      const cleanName = entry.name.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim();
+      const cleanName = sanitizeText(entry.name, 32);
       if (!cleanName) continue;
       valid.push({
         id: typeof entry.id === 'string' ? entry.id : normalizeNameKey(cleanName),
@@ -72,39 +75,30 @@ function mergeLeaderboard(
   secondaryEntries: LeaderboardEntry[]
 ): LeaderboardEntry[] {
   const byKey = new Map<string, LeaderboardEntry>();
-  for (const entry of [...primaryEntries, ...secondaryEntries]) {
-    const key = normalizeNameKey(entry.name);
-    if (!key) continue;
-    const prev = byKey.get(key);
-    if (!prev || compareLeaderboardEntries(entry, prev) < 0) {
-      byKey.set(key, entry);
+  const all = [primaryEntries, secondaryEntries];
+  for (const list of all) {
+    for (const entry of list) {
+      const key = normalizeNameKey(entry.name);
+      if (!key) continue;
+      const prev = byKey.get(key);
+      if (!prev || compareLeaderboardEntries(entry, prev) < 0) {
+        byKey.set(key, entry);
+      }
     }
   }
   return Array.from(byKey.values()).sort(compareLeaderboardEntries);
 }
 
 function readStoredEntries(key: string): LeaderboardEntry[] {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return [];
-    return mergeLeaderboard(parseEntries(JSON.parse(raw)), []);
-  } catch {
-    return [];
-  }
-}
-
-function writeStoredValue(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // Ignore storage access errors
-  }
+  const raw = readStorageJson<unknown>(key);
+  if (!raw) return [];
+  return mergeLeaderboard(parseEntries(raw), []);
 }
 
 function upsertPendingScore(candidate: LeaderboardEntry): LeaderboardEntry[] {
   const current = readStoredEntries(PENDING_SCORES_STORAGE_KEY);
   const next = mergeLeaderboard([candidate], current);
-  writeStoredValue(PENDING_SCORES_STORAGE_KEY, JSON.stringify(next));
+  writeStorage(PENDING_SCORES_STORAGE_KEY, JSON.stringify(next));
   return next;
 }
 
@@ -114,19 +108,15 @@ function removePendingScore(nameKey: string, syncedScore: number): void {
   const remaining = current.filter(
     (item) => !(normalizeNameKey(item.name) === nameKey && item.score <= syncedScore)
   );
-  writeStoredValue(PENDING_SCORES_STORAGE_KEY, JSON.stringify(remaining));
+  writeStorage(PENDING_SCORES_STORAGE_KEY, JSON.stringify(remaining));
 }
 
 export function useLeaderboard(defaultName?: string, options: UseLeaderboardOptions = {}) {
   const { activeModalOpen = false } = options;
 
   const [playerName, setPlayerNameState] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem(PLAYER_NAME_STORAGE_KEY);
-      if (saved) return saved;
-    } catch {
-      // Ignore storage access errors
-    }
+    const saved = readStorageString(PLAYER_NAME_STORAGE_KEY);
+    if (saved) return saved;
     return defaultName ?? '';
   });
 
@@ -139,11 +129,42 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const entriesRef = useRef<LeaderboardEntry[]>(entries);
+  entriesRef.current = entries;
   const submittingRef = useRef(submitting);
   submittingRef.current = submitting;
   const refreshInFlightRef = useRef(false);
   const pendingSyncInFlightRef = useRef(false);
   const lastFetchAtRef = useRef(0);
+  const unmountedRef = useRef(false);
+  const activeControllersRef = useRef<Set<AbortController>>(new Set());
+
+  const createTrackedRequest = useCallback((): {
+    controller: AbortController;
+    cleanup: () => void;
+  } => {
+    const controller = new AbortController();
+    activeControllersRef.current.add(controller);
+    const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    return {
+      controller,
+      cleanup: () => {
+        window.clearTimeout(timeoutId);
+        activeControllersRef.current.delete(controller);
+      },
+    };
+  }, []);
+
+  useEffect(() => {
+    unmountedRef.current = false;
+    return () => {
+      unmountedRef.current = true;
+      for (const controller of activeControllersRef.current) {
+        controller.abort();
+      }
+      activeControllersRef.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     if (!playerName && defaultName) {
@@ -154,73 +175,84 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
   const setPlayerName = useCallback((name: string) => {
     const trimmed = name.slice(0, 32);
     setPlayerNameState(trimmed);
-    writeStoredValue(PLAYER_NAME_STORAGE_KEY, trimmed.trim());
+    writeStorage(PLAYER_NAME_STORAGE_KEY, trimmed.trim());
   }, []);
 
-  const syncPendingScores = useCallback(async (serverEntries: LeaderboardEntry[]) => {
-    if (pendingSyncInFlightRef.current || submittingRef.current) return;
-    const pending = readStoredEntries(PENDING_SCORES_STORAGE_KEY);
-    if (pending.length === 0) return;
+  const syncPendingScores = useCallback(
+    async (serverEntries: LeaderboardEntry[]) => {
+      if (pendingSyncInFlightRef.current || submittingRef.current || unmountedRef.current) return;
+      const pending = readStoredEntries(PENDING_SCORES_STORAGE_KEY);
+      if (pending.length === 0) return;
 
-    const serverByKey = new Map<string, LeaderboardEntry>();
-    for (const entry of serverEntries) {
-      serverByKey.set(normalizeNameKey(entry.name), entry);
-    }
-
-    const toUpload: LeaderboardEntry[] = [];
-    for (const item of pending) {
-      const key = normalizeNameKey(item.name);
-      const serverMatch = serverByKey.get(key);
-      if (serverMatch && serverMatch.score >= item.score) {
-        removePendingScore(key, serverMatch.score);
-      } else {
-        toUpload.push(item);
+      const serverByKey = new Map<string, LeaderboardEntry>();
+      for (const entry of serverEntries) {
+        serverByKey.set(normalizeNameKey(entry.name), entry);
       }
-    }
 
-    if (toUpload.length === 0) return;
-
-    pendingSyncInFlightRef.current = true;
-    try {
-      let latestServerEntries = serverEntries;
-      for (const item of toUpload) {
-        const controller = new AbortController();
-        const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-        try {
-          const res = await fetch(API_LEADERBOARD_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(item),
-            cache: 'no-store',
-            signal: controller.signal,
-          });
-          const contentType = res.headers.get('content-type') || '';
-          if (res.ok && contentType.includes('application/json')) {
-            const data = (await res.json()) as ApiLeaderboardResponse;
-            if (data.source === 'redis') {
-              removePendingScore(normalizeNameKey(item.name), item.score);
-              latestServerEntries = mergeLeaderboard(parseEntries(data.entries), []);
-            }
-          }
-        } catch {
-          // Will retry on next refresh
-        } finally {
-          window.clearTimeout(timeoutId);
+      const toUpload: LeaderboardEntry[] = [];
+      const stillPending: LeaderboardEntry[] = [];
+      for (const item of pending) {
+        const key = normalizeNameKey(item.name);
+        const serverMatch = serverByKey.get(key);
+        if (!serverMatch || serverMatch.score < item.score) {
+          toUpload.push(item);
         }
       }
 
-      const remainingPending = readStoredEntries(PENDING_SCORES_STORAGE_KEY);
-      const merged = mergeLeaderboard(latestServerEntries, remainingPending);
-      setEntries(merged);
-      writeStoredValue(LEADERBOARD_STORAGE_KEY, JSON.stringify(merged));
-    } finally {
-      pendingSyncInFlightRef.current = false;
-    }
-  }, []);
+      if (toUpload.length === 0) {
+        writeStorage(PENDING_SCORES_STORAGE_KEY, '[]');
+        return;
+      }
+
+      pendingSyncInFlightRef.current = true;
+      try {
+        let latestServerEntries = serverEntries;
+        for (const item of toUpload) {
+          if (unmountedRef.current) break;
+          const { controller, cleanup } = createTrackedRequest();
+          try {
+            const res = await fetch(API_LEADERBOARD_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(item),
+              cache: 'no-store',
+              signal: controller.signal,
+            });
+            const contentType = res.headers.get('content-type') || '';
+            if (res.ok && contentType.includes('application/json')) {
+              const data = (await res.json()) as ApiLeaderboardResponse;
+              if (data.source === 'redis') {
+                latestServerEntries = mergeLeaderboard(parseEntries(data.entries), []);
+              } else {
+                stillPending.push(item);
+              }
+            } else {
+              stillPending.push(item);
+            }
+          } catch {
+            stillPending.push(item);
+          } finally {
+            cleanup();
+          }
+        }
+
+        writeStorage(PENDING_SCORES_STORAGE_KEY, JSON.stringify(stillPending));
+        if (!unmountedRef.current) {
+          const merged = mergeLeaderboard(latestServerEntries, stillPending);
+          entriesRef.current = merged;
+          setEntries(merged);
+          writeStorage(LEADERBOARD_STORAGE_KEY, JSON.stringify(merged));
+        }
+      } finally {
+        pendingSyncInFlightRef.current = false;
+      }
+    },
+    [createTrackedRequest]
+  );
 
   const refresh = useCallback(
     async (force = false) => {
-      if (submittingRef.current || refreshInFlightRef.current) return;
+      if (submittingRef.current || refreshInFlightRef.current || unmountedRef.current) return;
       if (!force && Date.now() - lastFetchAtRef.current < MIN_AUTO_REFRESH_INTERVAL_MS) {
         return;
       }
@@ -228,8 +260,7 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
       refreshInFlightRef.current = true;
       setLoading(true);
 
-      const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      const { controller, cleanup } = createTrackedRequest();
 
       try {
         const res = await fetch(`${API_LEADERBOARD_URL}?t=${Date.now()}`, {
@@ -238,7 +269,7 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
           signal: controller.signal,
         });
         const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json')) {
+        if (res.ok && contentType.includes('application/json') && !unmountedRef.current) {
           const data = (await res.json()) as ApiLeaderboardResponse;
           lastFetchAtRef.current = Date.now();
           const serverEntries = mergeLeaderboard(parseEntries(data.entries), []);
@@ -246,15 +277,17 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
           if (data.source === 'redis') {
             const pending = readStoredEntries(PENDING_SCORES_STORAGE_KEY);
             const merged = mergeLeaderboard(serverEntries, pending);
+            entriesRef.current = merged;
             setEntries(merged);
-            writeStoredValue(LEADERBOARD_STORAGE_KEY, JSON.stringify(merged));
+            writeStorage(LEADERBOARD_STORAGE_KEY, JSON.stringify(merged));
             if (pending.length > 0) {
               void syncPendingScores(serverEntries);
             }
           } else if (serverEntries.length > 0) {
             setEntries((prev) => {
               const merged = mergeLeaderboard(serverEntries, prev);
-              writeStoredValue(LEADERBOARD_STORAGE_KEY, JSON.stringify(merged));
+              entriesRef.current = merged;
+              writeStorage(LEADERBOARD_STORAGE_KEY, JSON.stringify(merged));
               return merged;
             });
           }
@@ -262,12 +295,14 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
       } catch {
         // Keep local entries when offline or unconfigured
       } finally {
-        window.clearTimeout(timeoutId);
+        cleanup();
         refreshInFlightRef.current = false;
-        setLoading(false);
+        if (!unmountedRef.current) {
+          setLoading(false);
+        }
       }
     },
-    [syncPendingScores]
+    [createTrackedRequest, syncPendingScores]
   );
 
   // Initial load + focus/visibility/online + cross-tab storage sync
@@ -287,7 +322,9 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
     const handleStorage = (e: StorageEvent) => {
       if (e.key === LEADERBOARD_STORAGE_KEY && e.newValue) {
         try {
-          setEntries(mergeLeaderboard(parseEntries(JSON.parse(e.newValue)), []));
+          const next = mergeLeaderboard(parseEntries(JSON.parse(e.newValue)), []);
+          entriesRef.current = next;
+          setEntries(next);
         } catch {
           // Ignore malformed storage payload
         }
@@ -334,7 +371,7 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
       bestCombo: number;
       popped: number;
     }): Promise<{ isNewBest: boolean }> => {
-      const cleanName = payload.name.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 32);
+      const cleanName = sanitizeText(payload.name, 32);
       if (!cleanName) return { isNewBest: false };
 
       setPlayerName(cleanName);
@@ -348,17 +385,17 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
         updatedAt: new Date().toISOString(),
       };
 
-      let localNewBest = true;
-      setEntries((prev) => {
-        const existing = prev.find((e) => normalizeNameKey(e.name) === candidate.id);
-        localNewBest = !existing || candidate.score > existing.score;
-        const merged = mergeLeaderboard([candidate], prev);
-        writeStoredValue(LEADERBOARD_STORAGE_KEY, JSON.stringify(merged));
-        return merged;
-      });
+      const existing = entriesRef.current.find(
+        (entry) => normalizeNameKey(entry.name) === candidate.id
+      );
+      const localNewBest = !existing || candidate.score > existing.score;
 
-      const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      const optimisticMerged = mergeLeaderboard([candidate], entriesRef.current);
+      entriesRef.current = optimisticMerged;
+      setEntries(optimisticMerged);
+      writeStorage(LEADERBOARD_STORAGE_KEY, JSON.stringify(optimisticMerged));
+
+      const { controller, cleanup } = createTrackedRequest();
       submittingRef.current = true;
       setSubmitting(true);
 
@@ -371,7 +408,7 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
           signal: controller.signal,
         });
         const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json')) {
+        if (res.ok && contentType.includes('application/json') && !unmountedRef.current) {
           const data = (await res.json()) as ApiLeaderboardResponse;
           lastFetchAtRef.current = Date.now();
           const serverEntries = mergeLeaderboard(parseEntries(data.entries), []);
@@ -380,20 +417,22 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
             removePendingScore(candidate.id, candidate.score);
             const pending = readStoredEntries(PENDING_SCORES_STORAGE_KEY);
             const merged = mergeLeaderboard(serverEntries, pending);
+            entriesRef.current = merged;
             setEntries(merged);
-            writeStoredValue(LEADERBOARD_STORAGE_KEY, JSON.stringify(merged));
-          } else {
-            upsertPendingScore(candidate);
-            setEntries((prev) => {
-              const merged = mergeLeaderboard(serverEntries, prev);
-              writeStoredValue(LEADERBOARD_STORAGE_KEY, JSON.stringify(merged));
-              return merged;
-            });
+            writeStorage(LEADERBOARD_STORAGE_KEY, JSON.stringify(merged));
+            return {
+              isNewBest: typeof data.isNewBest === 'boolean' ? data.isNewBest : localNewBest,
+            };
           }
 
-          return {
-            isNewBest: typeof data.isNewBest === 'boolean' ? data.isNewBest : localNewBest,
-          };
+          upsertPendingScore(candidate);
+          setEntries((prev) => {
+            const merged = mergeLeaderboard(serverEntries, prev);
+            entriesRef.current = merged;
+            writeStorage(LEADERBOARD_STORAGE_KEY, JSON.stringify(merged));
+            return merged;
+          });
+          return { isNewBest: localNewBest };
         }
 
         upsertPendingScore(candidate);
@@ -401,14 +440,16 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
         // Save pending score so it syncs automatically once online
         upsertPendingScore(candidate);
       } finally {
-        window.clearTimeout(timeoutId);
+        cleanup();
         submittingRef.current = false;
-        setSubmitting(false);
+        if (!unmountedRef.current) {
+          setSubmitting(false);
+        }
       }
 
       return { isNewBest: localNewBest };
     },
-    [setPlayerName]
+    [createTrackedRequest, setPlayerName]
   );
 
   return {
