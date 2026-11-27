@@ -503,7 +503,9 @@ export default function App() {
 
       <DoomsdayGameModal
         open={gameOpen}
-        accentHex="#38BDF8"
+        accentHex={activeCharacter.accentHex}
+        characterName={activeCharacter.name}
+        characterFaction={activeCharacter.faction}
         playerName={playerName}
         entries={leaderboardEntries}
         loadingLeaderboard={loadingLeaderboard}
