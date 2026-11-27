@@ -1,4 +1,4 @@
-import { Flame, Gamepad2, Medal, Play, RotateCcw, ShieldAlert, Trophy, X } from 'lucide-react';
+import { Flame, Gamepad2, Medal, Play, RefreshCw, RotateCcw, ShieldAlert, Trophy, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import type { BubbleKind, LeaderboardEntry } from '../types/game';
 import { GameBubbleIcon } from './GameBubbleIcons';
@@ -268,9 +268,15 @@ export function DoomsdayGameModal({
   const poppedRef = useRef(0);
   const lastPopAtRef = useRef(0);
   const roundEndedRef = useRef(false);
+  const roundIdRef = useRef(0);
+  const wasOpenRef = useRef(false);
 
   useEffect(() => {
+    const wasOpen = wasOpenRef.current;
+    wasOpenRef.current = open;
+
     if (!open) {
+      roundIdRef.current += 1;
       setPhase('lobby');
       setBombFlash(false);
       bubblesRef.current = [];
@@ -279,10 +285,11 @@ export function DoomsdayGameModal({
       return;
     }
 
-    setNameInput((prev) => (prev.trim() ? prev : playerName));
-    setNameError('');
-    void onRefreshLeaderboard();
-  }, [open, playerName, onRefreshLeaderboard]);
+    if (!wasOpen) {
+      setNameError('');
+      setNameInput((prev) => (prev.trim() ? prev : playerName));
+    }
+  }, [open, playerName]);
 
   useEffect(() => {
     if (!open) return;
@@ -307,6 +314,7 @@ export function DoomsdayGameModal({
     async (reason: EndReason) => {
       if (roundEndedRef.current) return;
       roundEndedRef.current = true;
+      const completedRoundId = roundIdRef.current;
 
       setEndReason(reason);
       setPhase('gameover');
@@ -320,7 +328,9 @@ export function DoomsdayGameModal({
         bestCombo: bestComboRef.current,
         popped: poppedRef.current,
       });
-      setIsNewBest(result.isNewBest);
+      if (roundIdRef.current === completedRoundId) {
+        setIsNewBest(result.isNewBest);
+      }
     },
     [nameInput, onSubmitScore]
   );
@@ -335,6 +345,7 @@ export function DoomsdayGameModal({
     setNameError('');
     onPlayerNameChange(cleanName);
 
+    roundIdRef.current += 1;
     roundEndedRef.current = false;
     scoreRef.current = 0;
     streakRef.current = 0;
@@ -660,14 +671,28 @@ export function DoomsdayGameModal({
             </form>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-5">
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="inline-flex items-center gap-1.5 text-[10px] font-bold tracking-[0.2em] text-white/65 uppercase">
                   <Trophy className="h-3.5 w-3.5" style={{ color: accentHex }} />
                   <span>Leaderboard</span>
                 </p>
-                <span className="text-[10px] font-semibold tabular-nums text-white/45">
-                  {entries.length} {entries.length === 1 ? 'player' : 'players'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-semibold tabular-nums text-white/45">
+                    {entries.length} {entries.length === 1 ? 'player' : 'players'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void onRefreshLeaderboard();
+                    }}
+                    disabled={loadingLeaderboard}
+                    aria-label="Refresh leaderboard"
+                    title="Refresh leaderboard"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/70 transition hover:border-white/35 hover:text-white disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${loadingLeaderboard ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
               </div>
               <LeaderboardList
                 entries={entries}
@@ -863,7 +888,7 @@ export function DoomsdayGameModal({
 
               <p className="mt-1 text-xs text-white/70">
                 {nameInput.trim()} · {poppedCount} popped · {bestCombo}x max streak
-                {isNewBest && (
+                {isNewBest && score > 0 && (
                   <span
                     className="ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase"
                     style={{ backgroundColor: `${accentHex}30`, color: accentHex }}
@@ -875,13 +900,28 @@ export function DoomsdayGameModal({
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-6">
-              <div className="mb-2 flex items-center justify-between">
+              <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="text-[10px] font-bold tracking-[0.2em] text-white/60 uppercase">
-                  Campus Leaderboard
+                  Campus Leaderboard · {entries.length}{' '}
+                  {entries.length === 1 ? 'player' : 'players'}
                 </p>
-                {submittingScore && (
-                  <span className="text-[10px] text-white/45">Syncing score...</span>
-                )}
+                <div className="flex items-center gap-2">
+                  {submittingScore && (
+                    <span className="text-[10px] text-white/45">Syncing score...</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void onRefreshLeaderboard();
+                    }}
+                    disabled={loadingLeaderboard}
+                    aria-label="Refresh leaderboard"
+                    title="Refresh leaderboard"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/70 transition hover:border-white/35 hover:text-white disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${loadingLeaderboard ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
               </div>
               <LeaderboardList
                 entries={entries}

@@ -6,7 +6,8 @@ const PRIVATE_CONTACTS_KEY = 'avengers_doomsday_contacts';
 const ABACUS_NAMESPACE = 'avengers-doomsday-campus';
 const ABACUS_KEY = 'interested';
 const UPSTREAM_TIMEOUT_MS = 5000;
-const MAX_ROSTER_ITEMS = 250;
+const MAX_ROSTER_ITEMS = 500;
+const MAX_RAW_READ_ITEMS = 1000;
 
 type WatchDateOption = 'dec-17' | 'after-17';
 type GroupSizeOption = 'solo' | 'plus-one' | 'squad';
@@ -69,41 +70,118 @@ async function redisCommand<T = unknown>(
   return data.result as T;
 }
 
-async function getRedisRoster(url: string, token: string): Promise<PublicWatchlistEntry[]> {
+function normalizeNameKey(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function sanitizeId(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  return /^[a-zA-Z0-9_-]{4,64}$/.test(trimmed) ? trimmed : '';
+}
+
+interface RawRosterItem {
+  raw: string;
+  entry: PublicWatchlistEntry;
+}
+
+async function readRawRoster(url: string, token: string): Promise<RawRosterItem[]> {
   const rawList = await redisCommand<string[] | null>(url, token, [
     'LRANGE',
     ROSTER_KEY,
     0,
-    MAX_ROSTER_ITEMS - 1,
+    MAX_RAW_READ_ITEMS - 1,
   ]);
 
   if (!Array.isArray(rawList)) return [];
 
-  const entries: PublicWatchlistEntry[] = [];
-  for (const item of rawList) {
+  const items: RawRosterItem[] = [];
+  for (const raw of rawList) {
     try {
-      const parsed = JSON.parse(item) as Partial<PublicWatchlistEntry>;
+      const parsed = JSON.parse(raw) as Partial<PublicWatchlistEntry>;
       if (
         typeof parsed.id === 'string' &&
         typeof parsed.name === 'string' &&
         (parsed.watchDate === 'dec-17' || parsed.watchDate === 'after-17')
       ) {
-        entries.push({
-          id: parsed.id,
-          name: parsed.name,
-          watchDate: parsed.watchDate,
-          groupSize:
-            parsed.groupSize === 'plus-one' || parsed.groupSize === 'squad'
-              ? parsed.groupSize
-              : 'solo',
-          info: typeof parsed.info === 'string' && parsed.info ? parsed.info : undefined,
-          createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : new Date().toISOString(),
+        const cleanName = sanitizeText(parsed.name, 40);
+        if (!cleanName) continue;
+        items.push({
+          raw,
+          entry: {
+            id: parsed.id,
+            name: cleanName,
+            watchDate: parsed.watchDate,
+            groupSize:
+              parsed.groupSize === 'plus-one' || parsed.groupSize === 'squad'
+                ? parsed.groupSize
+                : 'solo',
+            info: typeof parsed.info === 'string' && parsed.info ? parsed.info : undefined,
+            createdAt:
+              typeof parsed.createdAt === 'string' ? parsed.createdAt : new Date().toISOString(),
+          },
         });
       }
     } catch {
       // Skip malformed entry
     }
   }
+  return items;
+}
+
+function deduplicateRosterItems(items: RawRosterItem[]): {
+  entries: PublicWatchlistEntry[];
+  staleDistinctRaws: string[];
+} {
+  const sorted = [...items].sort((a, b) => {
+    const tA = new Date(a.entry.createdAt).getTime();
+    const tB = new Date(b.entry.createdAt).getTime();
+    return (Number.isFinite(tB) ? tB : 0) - (Number.isFinite(tA) ? tA : 0);
+  });
+
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
+  const keptRaws = new Set<string>();
+  const entries: PublicWatchlistEntry[] = [];
+  const candidatesForCleanup: string[] = [];
+
+  for (const item of sorted) {
+    const nameKey = normalizeNameKey(item.entry.name);
+    if (!nameKey) continue;
+
+    if (seenIds.has(item.entry.id) || seenNames.has(nameKey)) {
+      candidatesForCleanup.push(item.raw);
+      continue;
+    }
+
+    seenIds.add(item.entry.id);
+    seenNames.add(nameKey);
+    keptRaws.add(item.raw);
+    entries.push(item.entry);
+  }
+
+  // Only LREM raw strings that are strictly different from every kept raw string
+  // so concurrent GET requests cannot delete the kept entry.
+  const staleDistinctRaws = Array.from(
+    new Set(candidatesForCleanup.filter((raw) => !keptRaws.has(raw)))
+  );
+
+  return {
+    entries: entries.slice(0, MAX_ROSTER_ITEMS),
+    staleDistinctRaws,
+  };
+}
+
+async function getRedisRoster(url: string, token: string): Promise<PublicWatchlistEntry[]> {
+  const rawItems = await readRawRoster(url, token);
+  const { entries, staleDistinctRaws } = deduplicateRosterItems(rawItems);
+
+  if (staleDistinctRaws.length > 0) {
+    await Promise.allSettled(
+      staleDistinctRaws.map((raw) => redisCommand(url, token, ['LREM', ROSTER_KEY, 0, raw]))
+    );
+  }
+
   return entries;
 }
 
@@ -131,6 +209,21 @@ function sanitizeText(value: unknown, maxLen: number): string {
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+  const preParsedBody = (req as IncomingMessage & { body?: unknown }).body;
+  if (preParsedBody !== undefined && preParsedBody !== null) {
+    if (typeof preParsedBody === 'string') {
+      const trimmed = preParsedBody.trim();
+      if (!trimmed) return {};
+      const parsed = JSON.parse(trimmed);
+      return typeof parsed === 'object' && parsed !== null
+        ? (parsed as Record<string, unknown>)
+        : {};
+    }
+    if (typeof preParsedBody === 'object') {
+      return preParsedBody as Record<string, unknown>;
+    }
+  }
+
   const chunks: Buffer[] = [];
   let totalBytes = 0;
 
@@ -154,7 +247,10 @@ async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknow
 function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
   res.statusCode = statusCode;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('CDN-Cache-Control', 'no-store');
+  res.setHeader('Vercel-CDN-Cache-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
   res.end(JSON.stringify(body));
 }
 
@@ -225,18 +321,37 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       body.groupSize === 'plus-one' || body.groupSize === 'squad' ? body.groupSize : 'solo';
     const info = sanitizeText(body.info, 60);
     const contact = sanitizeText(body.contact, 80);
+    const clientId = sanitizeId(body.id);
+    const nameKey = normalizeNameKey(name);
     const incrementCount = body.incrementCount !== false;
 
-    const entry: PublicWatchlistEntry = {
-      id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-      name,
-      watchDate,
-      groupSize,
-      ...(info ? { info } : {}),
-      createdAt: new Date().toISOString(),
-    };
+    const generatedId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
     if (redis) {
+      const existingItems = await readRawRoster(redis.url, redis.token);
+      const matchingItems = existingItems.filter(
+        (item) =>
+          (clientId && item.entry.id === clientId) ||
+          normalizeNameKey(item.entry.name) === nameKey
+      );
+
+      const canonicalId = clientId || matchingItems[0]?.entry.id || generatedId;
+      const entry: PublicWatchlistEntry = {
+        id: canonicalId,
+        name,
+        watchDate,
+        groupSize,
+        ...(info ? { info } : {}),
+        createdAt: new Date().toISOString(),
+      };
+
+      const uniqueMatchingRaws = Array.from(new Set(matchingItems.map((item) => item.raw)));
+      if (uniqueMatchingRaws.length > 0) {
+        await Promise.all(
+          uniqueMatchingRaws.map((raw) => redisCommand(redis.url, redis.token, ['LREM', ROSTER_KEY, 0, raw]))
+        );
+      }
+
       const tasks: Promise<unknown>[] = [
         redisCommand(redis.url, redis.token, ['LPUSH', ROSTER_KEY, JSON.stringify(entry)]),
         redisCommand(redis.url, redis.token, ['LTRIM', ROSTER_KEY, 0, MAX_ROSTER_ITEMS - 1]),
@@ -252,7 +367,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
         );
       }
 
-      if (incrementCount) {
+      if (incrementCount && matchingItems.length === 0) {
         tasks.push(redisCommand(redis.url, redis.token, ['INCR', COUNTER_KEY]));
       }
 
@@ -273,6 +388,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       } satisfies CounterResult);
       return;
     }
+
+    const entry: PublicWatchlistEntry = {
+      id: clientId || generatedId,
+      name,
+      watchDate,
+      groupSize,
+      ...(info ? { info } : {}),
+      createdAt: new Date().toISOString(),
+    };
 
     const count = await queryAbacus(incrementCount ? 'POST' : 'GET');
     sendJson(res, 200, {

@@ -3,7 +3,6 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 const LEADERBOARD_SCORES_KEY = 'avengers_doomsday_game_scores';
 const LEADERBOARD_PLAYERS_KEY = 'avengers_doomsday_game_players';
 const UPSTREAM_TIMEOUT_MS = 5000;
-const MAX_LEADERBOARD_ENTRIES = 20;
 
 interface LeaderboardEntry {
   id: string;
@@ -65,11 +64,20 @@ async function redisCommand<T = unknown>(
 
 function sanitizeName(value: unknown): string {
   if (typeof value !== 'string') return '';
-  return value.replace(/\s+/g, ' ').trim().slice(0, 32);
+  return value.replace(/[<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 32);
 }
 
 function normalizePlayerKey(name: string): string {
   return name.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function compareLeaderboardEntries(a: LeaderboardEntry, b: LeaderboardEntry): number {
+  return (
+    b.score - a.score ||
+    b.popped - a.popped ||
+    b.bestCombo - a.bestCombo ||
+    a.name.localeCompare(b.name)
+  );
 }
 
 function parseStoredEntry(raw: string | null): LeaderboardEntry | null {
@@ -108,7 +116,7 @@ async function getTopLeaderboard(url: string, token: string): Promise<Leaderboar
     'ZREVRANGE',
     LEADERBOARD_SCORES_KEY,
     0,
-    MAX_LEADERBOARD_ENTRIES - 1,
+    -1,
     'WITHSCORES',
   ]);
 
@@ -134,28 +142,51 @@ async function getTopLeaderboard(url: string, token: string): Promise<Leaderboar
     ...keys,
   ]);
 
-  const entries: LeaderboardEntry[] = [];
+  const byKey = new Map<string, LeaderboardEntry>();
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
     const parsed = parseStoredEntry(Array.isArray(rawDetails) ? rawDetails[i] ?? null : null);
-    if (parsed) {
-      entries.push(parsed);
-    } else {
-      entries.push({
-        id: key,
-        name: key,
-        score: scoresByKey.get(key) ?? 0,
-        bestCombo: 1,
-        popped: 0,
-        updatedAt: new Date().toISOString(),
-      });
+    const zsetScore = scoresByKey.get(key) ?? 0;
+    const entry: LeaderboardEntry = parsed
+      ? {
+          ...parsed,
+          score: Math.max(parsed.score, zsetScore),
+        }
+      : {
+          id: key,
+          name: key,
+          score: zsetScore,
+          bestCombo: 1,
+          popped: 0,
+          updatedAt: new Date().toISOString(),
+        };
+
+    const dedupeKey = normalizePlayerKey(entry.name) || key;
+    const prev = byKey.get(dedupeKey);
+    if (!prev || compareLeaderboardEntries(entry, prev) < 0) {
+      byKey.set(dedupeKey, entry);
     }
   }
 
-  return entries.sort((a, b) => b.score - a.score);
+  return Array.from(byKey.values()).sort(compareLeaderboardEntries);
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+  const preParsedBody = (req as IncomingMessage & { body?: unknown }).body;
+  if (preParsedBody !== undefined && preParsedBody !== null) {
+    if (typeof preParsedBody === 'string') {
+      const trimmed = preParsedBody.trim();
+      if (!trimmed) return {};
+      const parsed = JSON.parse(trimmed);
+      return typeof parsed === 'object' && parsed !== null
+        ? (parsed as Record<string, unknown>)
+        : {};
+    }
+    if (typeof preParsedBody === 'object') {
+      return preParsedBody as Record<string, unknown>;
+    }
+  }
+
   const chunks: Buffer[] = [];
   let total = 0;
   for await (const chunk of req) {
@@ -175,7 +206,10 @@ async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknow
 function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
   res.statusCode = statusCode;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('CDN-Cache-Control', 'no-store');
+  res.setHeader('Vercel-CDN-Cache-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
   res.end(JSON.stringify(body));
 }
 
@@ -243,8 +277,12 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     ]);
     const existing = parseStoredEntry(existingRaw);
     const isNewBest = !existing || score > existing.score;
+    const isBetterTieStats =
+      Boolean(existing) &&
+      score === existing!.score &&
+      (popped > existing!.popped || bestCombo > existing!.bestCombo);
 
-    if (isNewBest) {
+    if (isNewBest || isBetterTieStats) {
       await Promise.all([
         redisCommand(redis.url, redis.token, ['ZADD', LEADERBOARD_SCORES_KEY, score, key]),
         redisCommand(redis.url, redis.token, [
@@ -259,7 +297,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const entries = await getTopLeaderboard(redis.url, redis.token);
     sendJson(res, 200, {
       entries,
-      entry: isNewBest ? candidate : existing,
+      entry: isNewBest || isBetterTieStats ? candidate : existing,
       isNewBest,
       source: 'redis',
     } satisfies LeaderboardResponse);

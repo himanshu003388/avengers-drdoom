@@ -38,9 +38,13 @@ export default function App() {
     rsvp,
     entries,
     submitting,
+    refreshing: refreshingWatchlist,
+    refresh: refreshWatchlist,
     markInterested,
     submitRsvp,
-  } = useWatchlist();
+  } = useWatchlist({
+    activeModalOpen: watchlistOpen || interestModalOpen,
+  });
   const {
     playerName,
     setPlayerName,
@@ -49,7 +53,12 @@ export default function App() {
     submitting: submittingScore,
     refresh: refreshLeaderboard,
     submitScore,
-  } = useLeaderboard(rsvp?.name);
+  } = useLeaderboard(rsvp?.name, { activeModalOpen: gameOpen });
+
+  const handleRefreshLeaderboard = useCallback(
+    () => refreshLeaderboard(true),
+    [refreshLeaderboard]
+  );
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const activeCharacterIdRef = useRef<string>(activeCharacterId);
@@ -478,6 +487,10 @@ export default function App() {
         entries={entries}
         totalCount={interestCount}
         hasSubmittedRsvp={Boolean(rsvp)}
+        refreshing={refreshingWatchlist}
+        onRefresh={() => {
+          void refreshWatchlist(true);
+        }}
         onClose={() => setWatchlistOpen(false)}
         onOpenRsvp={() => {
           markInterested();
@@ -494,7 +507,7 @@ export default function App() {
         submittingScore={submittingScore}
         onPlayerNameChange={setPlayerName}
         onSubmitScore={submitScore}
-        onRefreshLeaderboard={refreshLeaderboard}
+        onRefreshLeaderboard={handleRefreshLeaderboard}
         onClose={() => setGameOpen(false)}
       />
 

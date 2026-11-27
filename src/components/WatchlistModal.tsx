@@ -1,4 +1,4 @@
-import { Calendar, Flame, Lock, Users, X } from 'lucide-react';
+import { Calendar, Flame, Lock, RefreshCw, Users, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { PublicWatchlistEntry, WatchDateOption } from '../types/watchlist';
 
@@ -8,6 +8,8 @@ interface WatchlistModalProps {
   entries: PublicWatchlistEntry[];
   totalCount: number;
   hasSubmittedRsvp: boolean;
+  refreshing?: boolean;
+  onRefresh?: () => void;
   onClose: () => void;
   onOpenRsvp: () => void;
 }
@@ -33,6 +35,8 @@ export function WatchlistModal({
   entries,
   totalCount,
   hasSubmittedRsvp,
+  refreshing = false,
+  onRefresh,
   onClose,
   onOpenRsvp,
 }: WatchlistModalProps) {
@@ -105,16 +109,33 @@ export function WatchlistModal({
             </h2>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-            }}
-            aria-label="Close watchlist modal"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/75 transition hover:border-white/40 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-white/75"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {onRefresh && (
+              <button
+                type="button"
+                onClick={() => {
+                  onRefresh();
+                }}
+                disabled={refreshing}
+                aria-label="Refresh watchlist"
+                title="Refresh watchlist"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/75 transition hover:border-white/40 hover:bg-white/10 hover:text-white disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-white/75"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+              }}
+              aria-label="Close watchlist modal"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/75 transition hover:border-white/40 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-white/75"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
 
         {/* Filter Tabs (only shown once registered) */}

@@ -13,4 +13,5 @@ export interface PublicWatchlistEntry {
 
 export interface RsvpSubmission extends PublicWatchlistEntry {
   contact?: string;
+  synced?: boolean;
 }
