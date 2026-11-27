@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 
 interface FluidNode {
   x: number;
@@ -8,7 +8,7 @@ interface FluidNode {
 const NODE_COUNT = 12;
 const BLOB_SEGMENTS = 24;
 
-export function CinematicOverlay() {
+export const CinematicOverlay = memo(function CinematicOverlay() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [enableFluidCursor, setEnableFluidCursor] = useState(false);
 
@@ -32,12 +32,12 @@ export function CinematicOverlay() {
 
     let width = window.innerWidth;
     let height = window.innerHeight;
-    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let dpr = 1;
 
     const syncSize = () => {
       width = window.innerWidth;
       height = window.innerHeight;
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      dpr = Math.min(window.devicePixelRatio || 1, 1);
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       canvas.style.width = `${width}px`;
@@ -343,4 +343,4 @@ export function CinematicOverlay() {
       )}
     </>
   );
-}
+});

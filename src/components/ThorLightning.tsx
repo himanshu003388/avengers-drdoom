@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 
 interface ThorLightningProps {
   active: boolean;
@@ -65,7 +65,11 @@ function buildLightningSegments(
   }
 }
 
-export function ThorLightning({ active, phase, paused = false }: ThorLightningProps) {
+export const ThorLightning = memo(function ThorLightning({
+  active,
+  phase,
+  paused = false,
+}: ThorLightningProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const targetMixRef = useRef(phase === 'yellow' ? 1 : 0);
   const pausedRef = useRef(paused);
@@ -94,12 +98,12 @@ export function ThorLightning({ active, phase, paused = false }: ThorLightningPr
     let rafId = 0;
     let width = canvas.clientWidth || window.innerWidth;
     let height = canvas.clientHeight || window.innerHeight;
-    let dpr = Math.min(window.devicePixelRatio || 1, isCoarsePointer ? 1.5 : 2);
+    let dpr = Math.min(window.devicePixelRatio || 1, isCoarsePointer ? 1 : 1.25);
 
     const resize = () => {
       width = canvas.clientWidth || window.innerWidth;
       height = canvas.clientHeight || window.innerHeight;
-      dpr = Math.min(window.devicePixelRatio || 1, isCoarsePointer ? 1.5 : 2);
+      dpr = Math.min(window.devicePixelRatio || 1, isCoarsePointer ? 1 : 1.25);
       canvas.width = Math.max(1, Math.round(width * dpr));
       canvas.height = Math.max(1, Math.round(height * dpr));
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -147,7 +151,7 @@ export function ThorLightning({ active, phase, paused = false }: ThorLightningPr
         segments
       );
 
-      if (bolts.length >= 12) bolts.shift();
+      if (bolts.length >= 8) bolts.shift();
       bolts.push({
         segments,
         life: 0,
@@ -159,11 +163,11 @@ export function ThorLightning({ active, phase, paused = false }: ThorLightningPr
         flashAlpha = Math.min(0.28, flashAlpha + 0.16);
       }
 
-      const sparkCount = major ? 4 : 2;
+      const sparkCount = major ? 3 : 2;
       for (let i = 0; i < sparkCount; i++) {
         const seg = segments[Math.floor(Math.random() * segments.length)];
         if (!seg) continue;
-        if (sparks.length >= 48) sparks.shift();
+        if (sparks.length >= 28) sparks.shift();
         sparks.push({
           x: seg.x1,
           y: seg.y1,
@@ -327,9 +331,7 @@ export function ThorLightning({ active, phase, paused = false }: ThorLightningPr
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className={`pointer-events-none absolute inset-0 h-full w-full transition-opacity duration-500 ${
-        active ? 'opacity-100' : 'opacity-0'
-      }`}
+      className="pointer-events-none absolute inset-0 h-full w-full"
     />
   );
-}
+});

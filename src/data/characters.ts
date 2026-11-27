@@ -100,7 +100,7 @@ export const CHARACTERS: CharacterProfile[] = [
     threatLevel: 'STRATEGIC GENIUS',
     imageUrl: '/assets/aistudio/mister-fantastic-1024.webp',
     imageSizes: '(max-width: 1023px) 164vw, 112vw',
-    imageScaleClass: 'scale-[1.12]',
+    imageScaleClass: 'scale-[1.93] translate-y-[27%]',
     accentHex: '#38BDF8',
     emberTint: 'cyan-emerald',
     isCutout: true,

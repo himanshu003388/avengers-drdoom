@@ -46,14 +46,14 @@ export function computeShaderBufferSize(
 
   let scale = 1;
   if (isSoftwareRenderer) {
-    const maxWidth = 540;
-    scale = safeW > maxWidth ? maxWidth / safeW : 0.55;
+    const maxWidth = 400;
+    scale = safeW > maxWidth ? maxWidth / safeW : 0.45;
   } else if (isMobile || safeW <= 768) {
-    const targetMaxWidth = 420;
-    scale = Math.min(0.65, targetMaxWidth / safeW);
+    const targetMaxWidth = 300;
+    scale = Math.min(0.5, targetMaxWidth / safeW);
   } else {
-    const maxWidth = 1024;
-    scale = safeW > maxWidth ? maxWidth / safeW : 1;
+    const maxWidth = 640;
+    scale = safeW > maxWidth ? maxWidth / safeW : 0.75;
   }
 
   return {

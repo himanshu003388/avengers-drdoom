@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Gamepad2 } from 'lucide-react';
 
 interface NavbarProps {
@@ -5,7 +6,7 @@ interface NavbarProps {
   onOpenGame: () => void;
 }
 
-export function Navbar({ onResetHome, onOpenGame }: NavbarProps) {
+export const Navbar = memo(function Navbar({ onResetHome, onOpenGame }: NavbarProps) {
   return (
     <header className="relative z-40 shrink-0 border-b border-emerald-500/10 bg-[#020503]/90 md:bg-[#020503]/60 md:backdrop-blur-md">
       <div className="relative mx-auto flex max-w-6xl items-center justify-between px-[clamp(0.75rem,3vw,1.5rem)] pb-[clamp(0.4rem,1dvh,0.75rem)] pt-[max(clamp(0.4rem,1dvh,0.75rem),env(safe-area-inset-top))]">
@@ -20,7 +21,7 @@ export function Navbar({ onResetHome, onOpenGame }: NavbarProps) {
           <span className="inline-flex flex-col gap-[2px] select-none">
             <span
               aria-label="UPTTI"
-              className="flex w-full justify-between px-[2px] font-sans text-[clamp(0.375rem,1vw,0.46875rem)] font-extrabold leading-none text-[#52b77a] uppercase drop-shadow-[0_0_8px_rgba(22,101,52,0.75)]"
+              className="flex w-full justify-between px-[1px] font-sans text-[clamp(0.5rem,1.3vw,0.625rem)] font-extrabold leading-none text-[#52b77a] uppercase drop-shadow-[0_0_8px_rgba(22,101,52,0.75)]"
             >
               <span>U</span>
               <span>P</span>
@@ -99,4 +100,4 @@ export function Navbar({ onResetHome, onOpenGame }: NavbarProps) {
       </div>
     </header>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import type { CharacterProfile } from '../data/characters';
 import {
   type AtmosphereMode,
@@ -56,7 +56,7 @@ float fbm(vec2 p) {
     float total = 0.0;
     float amp = 0.54;
     vec2 shift = vec2(u_time * 0.07, -u_time * 0.18);
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 3; i++) {
         total += amp * noise(p);
         p = FBM_ROT * p * 1.88 + shift;
         amp *= 0.46;
@@ -97,7 +97,11 @@ void main() {
 }
 `;
 
-export function AtmosphericCanvas({ mode, activeCharacter, paused = false }: AtmosphericCanvasProps) {
+export const AtmosphericCanvas = memo(function AtmosphericCanvas({
+  mode,
+  activeCharacter,
+  paused = false,
+}: AtmosphericCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const intensityRef = useRef<number>(getShaderIntensity(mode));
   const tintRef = useRef<[number, number, number]>(getEmberTintColor(activeCharacter.emberTint));
@@ -263,7 +267,7 @@ export function AtmosphericCanvas({ mode, activeCharacter, paused = false }: Atm
       }
     };
 
-    const renderFrame = (elapsedSec: number) => {
+    const renderFrame = (elapsedSec: number, dt = 0.016) => {
       if (!gl || contextLost || !program) return;
       if (!resizeObserver) syncSize();
 
@@ -271,10 +275,12 @@ export function AtmosphericCanvas({ mode, activeCharacter, paused = false }: Atm
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
 
-      currentIntensity += (intensityRef.current - currentIntensity) * 0.06;
-      currentTint[0] += (tintRef.current[0] - currentTint[0]) * 0.05;
-      currentTint[1] += (tintRef.current[1] - currentTint[1]) * 0.05;
-      currentTint[2] += (tintRef.current[2] - currentTint[2]) * 0.05;
+      const modeEase = 1 - Math.exp(-5.0 * dt);
+      const tintEase = 1 - Math.exp(-4.8 * dt);
+      currentIntensity += (intensityRef.current - currentIntensity) * modeEase;
+      currentTint[0] += (tintRef.current[0] - currentTint[0]) * tintEase;
+      currentTint[1] += (tintRef.current[1] - currentTint[1]) * tintEase;
+      currentTint[2] += (tintRef.current[2] - currentTint[2]) * tintEase;
 
       const isMobileNow = isCoarsePointer || (canvas.clientWidth || window.innerWidth) <= 768 ? 1.0 : 0.0;
       if (uTime) gl.uniform1f(uTime, elapsedSec);
@@ -308,7 +314,7 @@ export function AtmosphericCanvas({ mode, activeCharacter, paused = false }: Atm
       elapsedSec += dt;
       // Keep u_time bounded so noise coordinates never lose precision on long-open tabs
       if (elapsedSec > 3600) elapsedSec -= 3600;
-      renderFrame(elapsedSec);
+      renderFrame(elapsedSec, dt);
       rafId = window.requestAnimationFrame(loop);
     };
 
@@ -387,4 +393,4 @@ export function AtmosphericCanvas({ mode, activeCharacter, paused = false }: Atm
       className="pointer-events-none fixed inset-0 z-10 h-full w-full"
     />
   );
-}
+});

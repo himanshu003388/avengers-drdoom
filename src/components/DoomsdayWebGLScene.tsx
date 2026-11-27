@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import type { AtmosphereMode } from '../utils/atmosphere';
 
 interface DoomsdayWebGLSceneProps {
@@ -31,7 +31,11 @@ function hexToRgb(hex: string): [number, number, number] {
   return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
 }
 
-export function DoomsdayWebGLScene({ accentHex, mode, paused = false }: DoomsdayWebGLSceneProps) {
+export const DoomsdayWebGLScene = memo(function DoomsdayWebGLScene({
+  accentHex,
+  mode,
+  paused = false,
+}: DoomsdayWebGLSceneProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const targetRgbRef = useRef<[number, number, number]>(hexToRgb(accentHex));
   const modeRef = useRef(mode);
@@ -64,7 +68,7 @@ export function DoomsdayWebGLScene({ accentHex, mode, paused = false }: Doomsday
 
     let width = canvas.clientWidth || window.innerWidth;
     let height = canvas.clientHeight || window.innerHeight;
-    const maxDpr = isCoarsePointer ? 1.5 : 2;
+    const maxDpr = isCoarsePointer ? 1 : 1.25;
     let dpr = Math.min(window.devicePixelRatio || 1, maxDpr);
 
     const syncSize = () => {
@@ -83,7 +87,7 @@ export function DoomsdayWebGLScene({ accentHex, mode, paused = false }: Doomsday
 
     const currentRgb: [number, number, number] = [...targetRgbRef.current];
 
-    const particleCount = isCoarsePointer || width < 768 ? 120 : 260;
+    const particleCount = isCoarsePointer || width < 768 ? 84 : 160;
     const particles: Particle3D[] = Array.from({ length: particleCount }, () => ({
       x: (Math.random() - 0.5) * 20,
       y: (Math.random() - 0.5) * 14,
@@ -113,11 +117,15 @@ export function DoomsdayWebGLScene({ accentHex, mode, paused = false }: Doomsday
     }
     window.addEventListener('resize', syncSize, { passive: true });
 
-    const minFrameMs = isCoarsePointer ? 32 : 0;
+    const minFrameMs = isCoarsePointer ? 33 : 0;
     let rafId = 0;
     let lastTime = performance.now();
     let lastRenderTime = lastTime;
     let elapsed = 0;
+    let lastFillStyle = '';
+    let lastR = -1;
+    let lastG = -1;
+    let lastB = -1;
 
     const drawFrame = (delta: number) => {
       elapsed += delta;
@@ -134,6 +142,13 @@ export function DoomsdayWebGLScene({ accentHex, mode, paused = false }: Doomsday
       const cr = Math.min(255, Math.round(currentRgb[0] * 1.08));
       const cg = Math.min(255, Math.round(currentRgb[1] * 1.12));
       const cb = Math.min(255, Math.round(currentRgb[2] * 1.05));
+
+      if (cr !== lastR || cg !== lastG || cb !== lastB) {
+        lastR = cr;
+        lastG = cg;
+        lastB = cb;
+        lastFillStyle = `rgb(${cr}, ${cg}, ${cb})`;
+      }
 
       const ptrEase = 1 - Math.exp(-3.8 * delta);
       smoothX += (pointerX - smoothX) * ptrEase;
@@ -155,7 +170,7 @@ export function DoomsdayWebGLScene({ accentHex, mode, paused = false }: Doomsday
       ctx.save();
       ctx.imageSmoothingEnabled = false;
       ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = `rgb(${cr}, ${cg}, ${cb})`;
+      ctx.fillStyle = lastFillStyle;
 
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
@@ -258,4 +273,4 @@ export function DoomsdayWebGLScene({ accentHex, mode, paused = false }: Doomsday
       />
     </div>
   );
-}
+});

@@ -4,7 +4,7 @@
  */
 
 import { Heart } from 'lucide-react';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AtmosphericCanvas } from './components/AtmosphericCanvas';
 import { BackgroundStage } from './components/BackgroundStage';
 import { CinematicOverlay } from './components/CinematicOverlay';
@@ -28,6 +28,7 @@ export default function App() {
   const [preloaderDone, setPreloaderDone] = useState(false);
   const [atmosphereMode, setAtmosphereMode] = useState<AtmosphereMode>('smoke-and-embers');
   const [activeCharacterId, setActiveCharacterId] = useState<string>(CHARACTERS[0].id);
+  const [transitionDirection, setTransitionDirection] = useState<1 | -1>(1);
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [interestModalOpen, setInterestModalOpen] = useState(false);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
@@ -62,12 +63,10 @@ export default function App() {
     [refreshLeaderboard]
   );
 
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const activeCharacterIdRef = useRef<string>(activeCharacterId);
-  activeCharacterIdRef.current = activeCharacterId;
+  const mainRef = useRef<HTMLElement | null>(null);
   const surgeTimeoutRef = useRef<number | null>(null);
   const lastScrollSwitchRef = useRef<number>(0);
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number; time: number; consumed: boolean } | null>(null);
 
   const activeCharacter: CharacterProfile =
     CHARACTERS.find((c) => c.id === activeCharacterId) ?? CHARACTERS[0];
@@ -83,11 +82,12 @@ export default function App() {
   }, []);
 
   const stepDossier = useCallback(
-    (direction: 1 | -1, cooldownMs = 1100) => {
+    (direction: 1 | -1, cooldownMs = 680) => {
       const now = performance.now();
-      if (now - lastScrollSwitchRef.current < cooldownMs) return;
+      if (now - lastScrollSwitchRef.current < cooldownMs) return false;
       lastScrollSwitchRef.current = now;
 
+      setTransitionDirection(direction);
       setActiveCharacterId((prevId) => {
         const currentIndex = Math.max(
           0,
@@ -97,6 +97,7 @@ export default function App() {
         return CHARACTERS[nextIndex].id;
       });
       triggerEmberSurge();
+      return true;
     },
     [triggerEmberSurge]
   );
@@ -105,6 +106,9 @@ export default function App() {
     (id: string) => {
       setActiveCharacterId((prevId) => {
         if (prevId === id) return prevId;
+        const prevIdx = CHARACTERS.findIndex((c) => c.id === prevId);
+        const nextIdx = CHARACTERS.findIndex((c) => c.id === id);
+        setTransitionDirection(nextIdx >= prevIdx ? 1 : -1);
         triggerEmberSurge();
         return id;
       });
@@ -113,234 +117,106 @@ export default function App() {
   );
 
   useEffect(() => {
-    const WHEEL_THRESHOLD = 280;
-    const TOUCH_THRESHOLD = 56;
-    const FLICK_MIN_DISTANCE = 28;
+    const WHEEL_THRESHOLD = 115;
+    const WHEEL_COOLDOWN_MS = 740;
+    const TOUCH_THRESHOLD = 48;
+    const FLICK_MIN_DISTANCE = 22;
     const FLICK_MAX_MS = 260;
-    const TOUCH_COOLDOWN_MS = 650;
-    const MAX_EXTRA_SCALE = 0.11;
-    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const TOUCH_COOLDOWN_MS = 680;
+
     let wheelAccum = 0;
     let lastWheelAt = 0;
-    let wheelResetTimer: number | null = null;
-    let targetProgress = 0;
-    let currentProgress = 0;
-    let pendingSwitchDir: 1 | -1 | null = null;
-    let isTouchDragging = false;
-    let rafId = 0;
-    let lastTime = performance.now();
 
-    const isZoomDossier = (id: string) =>
-      id === 'doctor-doom' ||
-      id === 'scarlet-nexus' ||
-      id === 'captain-america' ||
-      id === 'mister-fantastic';
-
-    let cachedZoomId = '';
-    let cachedZoomEl: HTMLElement | null = null;
-
-    const getZoomEl = () => {
-      const id = activeCharacterIdRef.current;
-      if (cachedZoomId !== id || !cachedZoomEl?.isConnected) {
-        cachedZoomId = id;
-        cachedZoomEl =
-          containerRef.current?.querySelector<HTMLElement>(`[data-zoom-id="${id}"]`) ?? null;
+    const canMainScrollInDirection = (dir: 1 | -1) => {
+      const main = mainRef.current;
+      if (!main || main.scrollHeight <= main.clientHeight + 4) return false;
+      if (dir > 0) {
+        return main.scrollTop + main.clientHeight < main.scrollHeight - 4;
       }
-      return cachedZoomEl;
-    };
-
-    const applyProgress = (progress: number) => {
-      const zoomEl = getZoomEl();
-      if (!zoomEl) return;
-      const scale = 1 + progress * MAX_EXTRA_SCALE;
-      zoomEl.style.transform = `translate3d(0, 0, 0) scale(${scale.toFixed(5)})`;
-    };
-
-    const tick = (now: number) => {
-      const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
-      lastTime = now;
-
-      const speed = pendingSwitchDir !== null ? 11 : isTouchDragging ? 18 : 6.5;
-      const ease = 1 - Math.exp(-speed * dt);
-      currentProgress += (targetProgress - currentProgress) * ease;
-
-      if (Math.abs(targetProgress - currentProgress) < 0.0015) {
-        currentProgress = targetProgress;
-      }
-
-      applyProgress(currentProgress);
-
-      if (pendingSwitchDir !== null && currentProgress >= 0.99) {
-        const dir = pendingSwitchDir;
-        pendingSwitchDir = null;
-        wheelAccum = 0;
-        targetProgress = 0;
-        currentProgress = 0;
-        rafId = 0;
-        // Keep DOM transform at 1.11 so the outgoing character stays zoomed while fading out
-        applyProgress(1);
-        stepDossier(dir, TOUCH_COOLDOWN_MS);
-        return;
-      }
-
-      if (Math.abs(targetProgress - currentProgress) < 0.001) {
-        rafId = 0;
-        return;
-      }
-
-      rafId = window.requestAnimationFrame(tick);
-    };
-
-    const setScrollProgress = (progress: number) => {
-      const clamped = Math.min(1, Math.max(0, progress));
-      if (prefersReducedMotion) {
-        currentProgress = clamped;
-        targetProgress = clamped;
-        applyProgress(clamped);
-        return;
-      }
-      targetProgress = clamped;
-      if (!rafId) {
-        lastTime = performance.now();
-        rafId = window.requestAnimationFrame(tick);
-      }
-    };
-
-    const scheduleWheelReset = () => {
-      if (wheelResetTimer !== null) {
-        window.clearTimeout(wheelResetTimer);
-      }
-      wheelResetTimer = window.setTimeout(() => {
-        if (pendingSwitchDir === null) {
-          wheelAccum = 0;
-          setScrollProgress(0);
-        }
-        wheelResetTimer = null;
-      }, 550);
-    };
-
-    const triggerZoomTransition = (dir: 1 | -1) => {
-      if (wheelResetTimer !== null) {
-        window.clearTimeout(wheelResetTimer);
-        wheelResetTimer = null;
-      }
-      if (prefersReducedMotion || currentProgress >= 0.99) {
-        wheelAccum = 0;
-        targetProgress = 0;
-        currentProgress = 0;
-        applyProgress(1);
-        stepDossier(dir, 1200);
-        return;
-      }
-      pendingSwitchDir = dir;
-      setScrollProgress(1);
+      return main.scrollTop > 4;
     };
 
     const handleWheel = (e: WheelEvent) => {
-      if (anyModalOpen || e.ctrlKey || pendingSwitchDir !== null) return;
+      if (anyModalOpen || e.ctrlKey) return;
       const dy = e.deltaMode === 1 ? e.deltaY * 32 : e.deltaY;
       const dx = e.deltaMode === 1 ? e.deltaX * 32 : e.deltaX;
-      if (Math.abs(dy) < Math.abs(dx)) return;
+      if (Math.abs(dy) < Math.abs(dx) || Math.abs(dy) < 2) return;
 
       const now = performance.now();
-      if (now - lastWheelAt > 550) {
+      if (now - lastScrollSwitchRef.current < WHEEL_COOLDOWN_MS) {
+        // Discard residual trackpad inertia during cooldown
         wheelAccum = 0;
-      }
-      lastWheelAt = now;
-
-      if (now - lastScrollSwitchRef.current < 1200) {
-        wheelAccum = 0;
+        lastWheelAt = now;
         return;
       }
 
+      if (now - lastWheelAt > 240 || (wheelAccum !== 0 && Math.sign(dy) !== Math.sign(wheelAccum))) {
+        wheelAccum = 0;
+      }
+      lastWheelAt = now;
       wheelAccum += dy;
 
-      if (isZoomDossier(activeCharacterIdRef.current) && wheelAccum !== 0) {
+      if (Math.abs(wheelAccum) >= WHEEL_THRESHOLD) {
         const dir: 1 | -1 = wheelAccum > 0 ? 1 : -1;
-        const absAccum = Math.abs(wheelAccum);
-        if (absAccum >= WHEEL_THRESHOLD) {
-          triggerZoomTransition(dir);
-          return;
-        }
-        setScrollProgress(absAccum / WHEEL_THRESHOLD);
-        scheduleWheelReset();
-      } else if (Math.abs(wheelAccum) >= WHEEL_THRESHOLD) {
-        const dir: 1 | -1 = wheelAccum > 0 ? 1 : -1;
+        if (canMainScrollInDirection(dir)) return;
         wheelAccum = 0;
-        stepDossier(dir, 1200);
+        stepDossier(dir, WHEEL_COOLDOWN_MS);
       }
     };
 
     const handleTouchStart = (e: TouchEvent) => {
-      if (anyModalOpen || pendingSwitchDir !== null || e.touches.length !== 1) {
-        isTouchDragging = false;
+      if (anyModalOpen || e.touches.length !== 1) {
         touchStartRef.current = null;
-        if (pendingSwitchDir === null && isZoomDossier(activeCharacterIdRef.current)) {
-          setScrollProgress(0);
-        }
         return;
       }
-      isTouchDragging = true;
       touchStartRef.current = {
         x: e.touches[0].clientX,
         y: e.touches[0].clientY,
         time: performance.now(),
+        consumed: false,
       };
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      if (anyModalOpen || pendingSwitchDir !== null || !touchStartRef.current || e.touches.length !== 1) return;
+      const start = touchStartRef.current;
+      if (anyModalOpen || !start || start.consumed || e.touches.length !== 1) return;
       if (performance.now() - lastScrollSwitchRef.current < TOUCH_COOLDOWN_MS) return;
 
-      const deltaX = touchStartRef.current.x - e.touches[0].clientX;
-      const deltaY = touchStartRef.current.y - e.touches[0].clientY;
-      if (isZoomDossier(activeCharacterIdRef.current) && Math.abs(deltaY) >= Math.abs(deltaX) && deltaY !== 0) {
-        setScrollProgress(Math.abs(deltaY) / TOUCH_THRESHOLD);
-      } else if (isZoomDossier(activeCharacterIdRef.current)) {
-        setScrollProgress(0);
+      const deltaX = start.x - e.touches[0].clientX;
+      const deltaY = start.y - e.touches[0].clientY;
+      const absY = Math.abs(deltaY);
+      const absX = Math.abs(deltaX);
+
+      if (absY >= TOUCH_THRESHOLD && absY > absX * 1.15) {
+        const dir: 1 | -1 = deltaY > 0 ? 1 : -1;
+        if (canMainScrollInDirection(dir)) return;
+        start.consumed = true;
+        stepDossier(dir, TOUCH_COOLDOWN_MS);
       }
     };
 
     const handleTouchCancel = () => {
-      isTouchDragging = false;
       touchStartRef.current = null;
-      if (pendingSwitchDir === null && isZoomDossier(activeCharacterIdRef.current)) {
-        setScrollProgress(0);
-      }
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
-      isTouchDragging = false;
-      if (anyModalOpen || pendingSwitchDir !== null || !touchStartRef.current || e.changedTouches.length === 0) {
-        touchStartRef.current = null;
-        if (pendingSwitchDir === null && isZoomDossier(activeCharacterIdRef.current)) {
-          setScrollProgress(0);
-        }
-        return;
-      }
-      const deltaX = touchStartRef.current.x - e.changedTouches[0].clientX;
-      const deltaY = touchStartRef.current.y - e.changedTouches[0].clientY;
-      const elapsedMs = performance.now() - touchStartRef.current.time;
+      const start = touchStartRef.current;
       touchStartRef.current = null;
+      if (anyModalOpen || !start || start.consumed || e.changedTouches.length === 0) return;
 
+      const deltaX = start.x - e.changedTouches[0].clientX;
+      const deltaY = start.y - e.changedTouches[0].clientY;
+      const elapsedMs = performance.now() - start.time;
       const absY = Math.abs(deltaY);
       const absX = Math.abs(deltaX);
+
       const isQuickFlick = absY >= FLICK_MIN_DISTANCE && elapsedMs <= FLICK_MAX_MS;
       const meetsDistance = absY >= TOUCH_THRESHOLD || isQuickFlick;
-
-      if (!meetsDistance || absY < absX) {
-        if (isZoomDossier(activeCharacterIdRef.current)) {
-          setScrollProgress(0);
-        }
-        return;
-      }
+      if (!meetsDistance || absY <= absX) return;
 
       const dir: 1 | -1 = deltaY > 0 ? 1 : -1;
-      if (isZoomDossier(activeCharacterIdRef.current)) {
-        triggerZoomTransition(dir);
-      } else {
-        stepDossier(dir, TOUCH_COOLDOWN_MS);
-      }
+      if (canMainScrollInDirection(dir)) return;
+      stepDossier(dir, TOUCH_COOLDOWN_MS);
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -358,10 +234,10 @@ export default function App() {
 
       if (e.key === 'ArrowDown' || e.key === 'PageDown') {
         e.preventDefault();
-        stepDossier(1, 450);
+        stepDossier(1, 520);
       } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
         e.preventDefault();
-        stepDossier(-1, 450);
+        stepDossier(-1, 520);
       }
     };
 
@@ -373,10 +249,6 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      window.cancelAnimationFrame(rafId);
-      if (wheelResetTimer !== null) {
-        window.clearTimeout(wheelResetTimer);
-      }
       window.removeEventListener('wheel', handleWheel);
       window.removeEventListener('touchstart', handleTouchStart);
       window.removeEventListener('touchmove', handleTouchMove);
@@ -385,15 +257,6 @@ export default function App() {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [stepDossier, anyModalOpen]);
-
-  useLayoutEffect(() => {
-    const zoomEl = containerRef.current?.querySelector<HTMLElement>(
-      `[data-zoom-id="${activeCharacterId}"]`
-    );
-    if (zoomEl) {
-      zoomEl.style.transform = 'translate3d(0, 0, 0) scale(1)';
-    }
-  }, [activeCharacterId]);
 
   useEffect(() => {
     return () => {
@@ -407,11 +270,32 @@ export default function App() {
     setTrailerOpen(true);
   }, []);
 
+  const handleResetHome = useCallback(() => {
+    selectCharacter(CHARACTERS[0].id);
+  }, [selectCharacter]);
+
+  const handleOpenGame = useCallback(() => {
+    setGameOpen(true);
+  }, []);
+
+  const handleOpenInterest = useCallback(() => {
+    markInterested();
+    setInterestModalOpen(true);
+  }, [markInterested]);
+
+  const handleOpenWatchlist = useCallback(() => {
+    setWatchlistOpen(true);
+  }, []);
+
+  const handleStepDossierClick = useCallback(
+    (dir: 1 | -1) => {
+      stepDossier(dir, 520);
+    },
+    [stepDossier]
+  );
+
   return (
-    <div
-      ref={containerRef}
-      className="relative flex h-dvh flex-col touch-none overflow-hidden overscroll-none bg-[#020503]"
-    >
+    <div className="relative flex h-dvh flex-col touch-none overflow-hidden overscroll-none bg-[#020503]">
       {!preloaderDone && <CinematicPreloader onComplete={() => setPreloaderDone(true)} />}
 
       <ErrorBoundary silent>
@@ -419,6 +303,7 @@ export default function App() {
           characters={CHARACTERS}
           activeCharacterId={activeCharacter.id}
           activeCharacterOverride={activeCharacter}
+          transitionDirection={transitionDirection}
           paused={anyModalOpen}
         />
       </ErrorBoundary>
@@ -443,30 +328,26 @@ export default function App() {
         <CinematicOverlay />
       </ErrorBoundary>
 
-      <Navbar
-        onResetHome={() => selectCharacter(CHARACTERS[0].id)}
-        onOpenGame={() => setGameOpen(true)}
-      />
+      <Navbar onResetHome={handleResetHome} onOpenGame={handleOpenGame} />
 
       <main
+        ref={mainRef}
         className="relative z-20 flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto"
         data-active-backdrop={activeCharacter.id}
       >
         <HeroSection
           activeCharacter={activeCharacter}
           characters={CHARACTERS}
+          transitionDirection={transitionDirection}
           interested={interested}
           interestCount={interestCount}
           rsvp={rsvp}
           rosterCount={entries.length}
           onSurgeAtmosphere={triggerEmberSurge}
           onOpenTrailer={handleOpenTrailer}
-          onOpenInterest={() => {
-            markInterested();
-            setInterestModalOpen(true);
-          }}
-          onOpenWatchlist={() => setWatchlistOpen(true)}
-          onStepDossier={(dir) => stepDossier(dir, 450)}
+          onOpenInterest={handleOpenInterest}
+          onOpenWatchlist={handleOpenWatchlist}
+          onStepDossier={handleStepDossierClick}
         />
       </main>
 
