@@ -23,6 +23,27 @@ function markVisited(): void {
   }
 }
 
+function detectClientDeviceType(): 'mobile' | 'desktop' {
+  if (typeof navigator !== 'undefined') {
+    const navWithUaData = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
+    if (typeof navWithUaData.userAgentData?.mobile === 'boolean') {
+      return navWithUaData.userAgentData.mobile ? 'mobile' : 'desktop';
+    }
+    if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(navigator.userAgent)) {
+      return 'mobile';
+    }
+    // Catch iPadOS / touch-only tablets that report a desktop user agent
+    if (
+      navigator.maxTouchPoints > 1 &&
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(pointer: coarse)').matches
+    ) {
+      return 'mobile';
+    }
+  }
+  return 'desktop';
+}
+
 export function useVisitTracker(): void {
   useEffect(() => {
     if (sessionDispatched || hasVisitedBefore()) return;
@@ -41,6 +62,8 @@ export function useVisitTracker(): void {
       try {
         const res = await fetch(VISIT_API_URL, {
           method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceType: detectClientDeviceType() }),
           cache: 'no-store',
           keepalive: true,
           signal: controller.signal,
