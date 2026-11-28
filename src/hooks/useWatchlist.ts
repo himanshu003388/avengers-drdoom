@@ -231,6 +231,7 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
   submittingRef.current = submitting;
   const refreshInFlightRef = useRef(false);
   const unsyncedSyncInFlightRef = useRef(false);
+  const mutationVersionRef = useRef(0);
   const lastFetchAtRef = useRef(0);
   const unmountedRef = useRef(false);
   const activeControllersRef = useRef<Set<AbortController>>(new Set());
@@ -276,6 +277,7 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
     async (pendingRsvp: RsvpSubmission) => {
       if (unsyncedSyncInFlightRef.current || submittingRef.current || unmountedRef.current) return;
       unsyncedSyncInFlightRef.current = true;
+      const requestVersion = mutationVersionRef.current;
 
       const hasPendingVote = readStorageString(PENDING_VOTE_STORAGE_KEY) === '1';
       const { controller, cleanup } = createTrackedRequest();
@@ -298,7 +300,13 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
         });
 
         const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json') && !unmountedRef.current) {
+        if (
+          res.ok &&
+          contentType.includes('application/json') &&
+          !unmountedRef.current &&
+          !submittingRef.current &&
+          mutationVersionRef.current === requestVersion
+        ) {
           const result = (await res.json()) as ApiResponse;
           if (hasPendingVote) {
             removeStorage(PENDING_VOTE_STORAGE_KEY);
@@ -343,6 +351,7 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
 
       refreshInFlightRef.current = true;
       setRefreshing(true);
+      const requestVersion = mutationVersionRef.current;
 
       const { controller, cleanup } = createTrackedRequest();
 
@@ -362,7 +371,13 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
         const { count, entries: serverEntries, source } = await fetchWatchlistState(
           controller.signal
         );
-        if (unmountedRef.current) return;
+        if (
+          unmountedRef.current ||
+          submittingRef.current ||
+          mutationVersionRef.current !== requestVersion
+        ) {
+          return;
+        }
 
         lastFetchAtRef.current = Date.now();
 
@@ -537,6 +552,7 @@ export function useWatchlist(options: UseWatchlistOptions = {}) {
       info: string;
       contact: string;
     }) => {
+      mutationVersionRef.current += 1;
       setSubmitting(true);
       submittingRef.current = true;
 

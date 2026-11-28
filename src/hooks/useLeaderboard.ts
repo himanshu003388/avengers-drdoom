@@ -51,7 +51,7 @@ function parseEntries(raw: unknown): LeaderboardEntry[] {
       const cleanName = sanitizeText(entry.name, 32);
       if (!cleanName) continue;
       valid.push({
-        id: typeof entry.id === 'string' ? entry.id : normalizeNameKey(cleanName),
+        id: normalizeNameKey(cleanName),
         name: cleanName,
         score: Math.max(0, Math.floor(entry.score)),
         bestCombo:
@@ -135,6 +135,7 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
   submittingRef.current = submitting;
   const refreshInFlightRef = useRef(false);
   const pendingSyncInFlightRef = useRef(false);
+  const mutationVersionRef = useRef(0);
   const lastFetchAtRef = useRef(0);
   const unmountedRef = useRef(false);
   const activeControllersRef = useRef<Set<AbortController>>(new Set());
@@ -205,6 +206,7 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
       }
 
       pendingSyncInFlightRef.current = true;
+      const requestVersion = mutationVersionRef.current;
       try {
         let latestServerEntries = serverEntries;
         for (const item of toUpload) {
@@ -237,7 +239,11 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
         }
 
         writeStorage(PENDING_SCORES_STORAGE_KEY, JSON.stringify(stillPending));
-        if (!unmountedRef.current) {
+        if (
+          !unmountedRef.current &&
+          !submittingRef.current &&
+          mutationVersionRef.current === requestVersion
+        ) {
           const merged = mergeLeaderboard(latestServerEntries, stillPending);
           entriesRef.current = merged;
           setEntries(merged);
@@ -259,6 +265,7 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
 
       refreshInFlightRef.current = true;
       setLoading(true);
+      const requestVersion = mutationVersionRef.current;
 
       const { controller, cleanup } = createTrackedRequest();
 
@@ -269,7 +276,13 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
           signal: controller.signal,
         });
         const contentType = res.headers.get('content-type') || '';
-        if (res.ok && contentType.includes('application/json') && !unmountedRef.current) {
+        if (
+          res.ok &&
+          contentType.includes('application/json') &&
+          !unmountedRef.current &&
+          !submittingRef.current &&
+          mutationVersionRef.current === requestVersion
+        ) {
           const data = (await res.json()) as ApiLeaderboardResponse;
           lastFetchAtRef.current = Date.now();
           const serverEntries = mergeLeaderboard(parseEntries(data.entries), []);
@@ -376,6 +389,7 @@ export function useLeaderboard(defaultName?: string, options: UseLeaderboardOpti
 
       setPlayerName(cleanName);
 
+      mutationVersionRef.current += 1;
       const candidate: LeaderboardEntry = {
         id: normalizeNameKey(cleanName),
         name: cleanName,

@@ -1,4 +1,4 @@
-import { Calendar, Flame, Lock, RefreshCw, Users, X } from 'lucide-react';
+import { Calendar, Flame, RefreshCw, Users, X } from 'lucide-react';
 import { useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useModalBehavior } from '../hooks/useModalBehavior';
 import type { PublicWatchlistEntry, WatchDateOption } from '../types/watchlist';
@@ -148,49 +148,7 @@ export function WatchlistModal({
           </div>
         </div>
 
-        {!hasSubmittedRsvp ? (
-          <div className="flex min-h-[18rem] flex-1 flex-col items-center justify-center px-6 py-8 text-center">
-            <div
-              className="flex h-12 w-12 items-center justify-center rounded-full border"
-              style={{
-                borderColor: `${accentHex}55`,
-                backgroundColor: `${accentHex}1a`,
-                boxShadow: `0 0 24px ${accentHex}24`,
-              }}
-            >
-              <Lock className="h-5 w-5" style={{ color: accentHex }} aria-hidden="true" />
-            </div>
-            <h3 className="mt-4 font-display text-sm font-bold tracking-[0.14em] text-white uppercase sm:text-base">
-              Register Yourself First
-            </h3>
-            <p className="mt-2 max-w-sm text-xs leading-relaxed text-white/70 sm:text-sm">
-              Add your name and preferred watch date to see who&apos;s going.
-              {entries.length > 0 && (
-                <span className="mt-1 block text-[11px] text-white/55">
-                  {entries.length} {entries.length === 1 ? 'person is' : 'people are'} already on
-                  the list.
-                </span>
-              )}
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onOpenRsvp();
-              }}
-              style={{
-                borderColor: `${accentHex}80`,
-                backgroundColor: `${accentHex}26`,
-              }}
-              className="mt-5 inline-flex min-h-[40px] items-center gap-2 rounded-full border px-5 py-2 text-xs font-bold tracking-[0.14em] text-white uppercase transition hover:brightness-125 focus-visible:outline-2 focus-visible:outline-white/75"
-            >
-              <Flame className="h-3.5 w-3.5" style={{ color: accentHex }} aria-hidden="true" />
-              <span>Register Yourself</span>
-            </button>
-          </div>
-        ) : (
-          <>
-            {/* Filter Tabs */}
+        {/* Filter Tabs */}
             <div className="border-b border-white/10 px-4 py-2.5 sm:px-5">
               <div
                 role="tablist"
@@ -355,8 +313,6 @@ export function WatchlistModal({
                 </ul>
               )}
             </div>
-          </>
-        )}
 
         {/* Footer CTA */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 bg-black/40 px-4 py-2.5 sm:px-5">
@@ -364,23 +320,21 @@ export function WatchlistModal({
             Names &amp; dates are public. Contact info is never shown.
           </p>
 
-          {hasSubmittedRsvp && (
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onOpenRsvp();
-              }}
-              style={{
-                borderColor: `${accentHex}80`,
-                backgroundColor: `${accentHex}26`,
-              }}
-              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold tracking-[0.12em] text-white uppercase transition hover:brightness-125 focus-visible:outline-2 focus-visible:outline-white/75"
-            >
-              <Flame className="h-3 w-3" style={{ color: accentHex }} aria-hidden="true" />
-              <span>My RSVP Pass</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onOpenRsvp();
+            }}
+            style={{
+              borderColor: `${accentHex}80`,
+              backgroundColor: `${accentHex}26`,
+            }}
+            className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-bold tracking-[0.12em] text-white uppercase transition hover:brightness-125 focus-visible:outline-2 focus-visible:outline-white/75"
+          >
+            <Flame className="h-3 w-3" style={{ color: accentHex }} aria-hidden="true" />
+            <span>{hasSubmittedRsvp ? 'My RSVP Pass' : 'Join the List'}</span>
+          </button>
         </div>
       </div>
     </div>
